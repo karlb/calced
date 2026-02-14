@@ -53,6 +53,93 @@ BUILTIN_FUNC_NAMES = set(BUILTIN_FUNCS_1) | set(BUILTIN_FUNCS_N)
 
 BUILTIN_CONSTS = {"pi": math.pi, "e": math.e, "tau": math.tau}
 
+# --- Unit conversion tables ---
+UNIT_TABLE = {
+    "length": {
+        "_base": "meter",
+        "mm": 0.001, "millimeter": 0.001, "millimeters": 0.001,
+        "cm": 0.01, "centimeter": 0.01, "centimeters": 0.01,
+        "m": 1, "meter": 1, "meters": 1,
+        "km": 1000, "kilometer": 1000, "kilometers": 1000,
+        "in": 0.0254, "inch": 0.0254, "inches": 0.0254,
+        "ft": 0.3048, "foot": 0.3048, "feet": 0.3048,
+        "yd": 0.9144, "yard": 0.9144, "yards": 0.9144,
+        "mi": 1609.344, "mile": 1609.344, "miles": 1609.344,
+    },
+    "mass": {
+        "_base": "gram",
+        "mg": 0.001, "milligram": 0.001, "milligrams": 0.001,
+        "g": 1, "gram": 1, "grams": 1,
+        "kg": 1000, "kilogram": 1000, "kilograms": 1000,
+        "oz": 28.3495, "ounce": 28.3495, "ounces": 28.3495,
+        "lb": 453.592, "lbs": 453.592, "pound": 453.592, "pounds": 453.592,
+    },
+    "temperature": {
+        "_base": "special",
+        "c": "c", "celsius": "c",
+        "f": "f", "fahrenheit": "f",
+        "k": "k", "kelvin": "k",
+    },
+    "data": {
+        "_base": "byte",
+        "b": 1, "byte": 1, "bytes": 1,
+        "kb": 1000, "kilobyte": 1000, "kilobytes": 1000,
+        "mb": 1e6, "megabyte": 1e6, "megabytes": 1e6,
+        "gb": 1e9, "gigabyte": 1e9, "gigabytes": 1e9,
+        "tb": 1e12, "terabyte": 1e12, "terabytes": 1e12,
+        "kib": 1024, "kibibyte": 1024, "kibibytes": 1024,
+        "mib": 1048576, "mebibyte": 1048576, "mebibytes": 1048576,
+        "gib": 1073741824, "gibibyte": 1073741824, "gibibytes": 1073741824,
+        "tib": 1099511627776, "tebibyte": 1099511627776, "tebibytes": 1099511627776,
+    },
+    "time": {
+        "_base": "second",
+        "ms": 0.001, "millisecond": 0.001, "milliseconds": 0.001,
+        "s": 1, "sec": 1, "second": 1, "seconds": 1,
+        "min": 60, "minute": 60, "minutes": 60,
+        "hr": 3600, "hour": 3600, "hours": 3600,
+        "day": 86400, "days": 86400,
+        "week": 604800, "weeks": 604800,
+    },
+    "volume": {
+        "_base": "ml",
+        "ml": 1, "milliliter": 1, "milliliters": 1,
+        "l": 1000, "liter": 1000, "liters": 1000,
+        "tsp": 4.929, "teaspoon": 4.929, "teaspoons": 4.929,
+        "tbsp": 14.787, "tablespoon": 14.787, "tablespoons": 14.787,
+        "floz": 29.574, "cup": 236.588, "cups": 236.588,
+        "pt": 473.176, "pint": 473.176, "pints": 473.176,
+        "qt": 946.353, "quart": 946.353, "quarts": 946.353,
+        "gal": 3785.41, "gallon": 3785.41, "gallons": 3785.41,
+    },
+}
+
+# Flat lookup: lowercase name → (dimension, factor_or_key)
+UNIT_LOOKUP = {}
+for _dim, _units in UNIT_TABLE.items():
+    for _name, _factor in _units.items():
+        if _name.startswith("_"):
+            continue
+        UNIT_LOOKUP[_name] = (_dim, _factor)
+
+
+def convert_temperature(value, from_key, to_key):
+    """Convert temperature via Kelvin as intermediate."""
+    # To Kelvin
+    if from_key == "c":
+        k = value + 273.15
+    elif from_key == "f":
+        k = (value - 32) * 5 / 9 + 273.15
+    else:
+        k = value
+    # From Kelvin
+    if to_key == "c":
+        return k - 273.15
+    elif to_key == "f":
+        return (k - 273.15) * 9 / 5 + 32
+    else:
+        return k
+
 
 class ParseError(Exception):
     pass
@@ -167,6 +254,21 @@ RESET = "\033[0m"
 def colorize_expr(text, variables):
     """Return text with dim escapes around ignored (non-math) words."""
     tokens = tokenize(text)
+    # Detect unit conversion suffix to mark those indices as active
+    conv_indices = set()
+    eof_idx = len(tokens) - 1
+    if eof_idx >= 4:
+        t_to = tokens[eof_idx - 1]
+        t_kw = tokens[eof_idx - 2]
+        t_fr = tokens[eof_idx - 3]
+        if (t_to[0] in ("WORD", "FUNC") and t_kw[0] == "WORD"
+                and t_kw[1].lower() in ("in", "to")
+                and t_fr[0] in ("WORD", "FUNC")):
+            fr_name = t_fr[1].lower()
+            to_name = t_to[1].lower()
+            if (fr_name in UNIT_LOOKUP and to_name in UNIT_LOOKUP
+                    and UNIT_LOOKUP[fr_name][0] == UNIT_LOOKUP[to_name][0]):
+                conv_indices = {eof_idx - 3, eof_idx - 2, eof_idx - 1}
     parts = []
     pos = 0
     for idx, t in enumerate(tokens):
@@ -177,7 +279,9 @@ def colorize_expr(text, variables):
         if start > pos:
             parts.append(text[pos:start])
         # Determine if token is active or ignored
-        if t[0] in ACTIVE_TYPES:
+        if idx in conv_indices:
+            parts.append(text[start:end])
+        elif t[0] in ACTIVE_TYPES:
             parts.append(text[start:end])
         elif t[0] == "WORD":
             # Active if: variable reference, or assignment target (pos 0 followed by EQ)
@@ -343,6 +447,26 @@ def evaluate_line(text, variables):
         var_name = tokens[0][1].lower()
         pos = 2
 
+    # Detect unit conversion suffix: ... <from_unit> in|to <to_unit> EOF
+    conversion = None
+    conv_end = len(tokens) - 1  # index of EOF
+    if conv_end >= 4:
+        t_to = tokens[conv_end - 1]
+        t_kw = tokens[conv_end - 2]
+        t_fr = tokens[conv_end - 3]
+        if (t_to[0] in ("WORD", "FUNC") and t_kw[0] == "WORD"
+                and t_kw[1].lower() in ("in", "to")
+                and t_fr[0] in ("WORD", "FUNC")):
+            to_name = t_to[1].lower()
+            fr_name = t_fr[1].lower()
+            if fr_name in UNIT_LOOKUP and to_name in UNIT_LOOKUP:
+                fr_dim, fr_factor = UNIT_LOOKUP[fr_name]
+                to_dim, to_factor = UNIT_LOOKUP[to_name]
+                if fr_dim == to_dim:
+                    conversion = (fr_dim, fr_factor, to_factor)
+                    # Remove the 3 conversion tokens (keep EOF)
+                    tokens = tokens[:conv_end - 3] + [tokens[conv_end]]
+
     # Build math token list (resolve variables, skip plain words)
     math_tokens = []
     for t in tokens[pos:]:
@@ -361,6 +485,12 @@ def evaluate_line(text, variables):
         result = parser.parse_expr()
         if parser.peek()[0] != "EOF":
             return None, variables  # leftover tokens = ambiguous
+        if conversion is not None:
+            dim, from_factor, to_factor = conversion
+            if dim == "temperature":
+                result = convert_temperature(result, from_factor, to_factor)
+            else:
+                result = result * from_factor / to_factor
         if var_name:
             variables = {**variables, var_name: result}
         return result, variables

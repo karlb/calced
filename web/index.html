@@ -95,6 +95,78 @@ const BUILTIN_FUNCS_N = {
 const BUILTIN_FUNC_NAMES = new Set([...Object.keys(BUILTIN_FUNCS_1), ...Object.keys(BUILTIN_FUNCS_N)]);
 const BUILTIN_CONSTS = { pi: Math.PI, e: Math.E, tau: 2 * Math.PI };
 
+// --- Unit conversion tables ---
+const UNIT_TABLE = {
+  length: {
+    mm:0.001,millimeter:0.001,millimeters:0.001,
+    cm:0.01,centimeter:0.01,centimeters:0.01,
+    m:1,meter:1,meters:1,
+    km:1000,kilometer:1000,kilometers:1000,
+    "in":0.0254,inch:0.0254,inches:0.0254,
+    ft:0.3048,foot:0.3048,feet:0.3048,
+    yd:0.9144,yard:0.9144,yards:0.9144,
+    mi:1609.344,mile:1609.344,miles:1609.344,
+  },
+  mass: {
+    mg:0.001,milligram:0.001,milligrams:0.001,
+    g:1,gram:1,grams:1,
+    kg:1000,kilogram:1000,kilograms:1000,
+    oz:28.3495,ounce:28.3495,ounces:28.3495,
+    lb:453.592,lbs:453.592,pound:453.592,pounds:453.592,
+  },
+  temperature: {
+    c:"c",celsius:"c",
+    f:"f",fahrenheit:"f",
+    k:"k",kelvin:"k",
+  },
+  data: {
+    b:1,byte:1,bytes:1,
+    kb:1000,kilobyte:1000,kilobytes:1000,
+    mb:1e6,megabyte:1e6,megabytes:1e6,
+    gb:1e9,gigabyte:1e9,gigabytes:1e9,
+    tb:1e12,terabyte:1e12,terabytes:1e12,
+    kib:1024,kibibyte:1024,kibibytes:1024,
+    mib:1048576,mebibyte:1048576,mebibytes:1048576,
+    gib:1073741824,gibibyte:1073741824,gibibytes:1073741824,
+    tib:1099511627776,tebibyte:1099511627776,tebibytes:1099511627776,
+  },
+  time: {
+    ms:0.001,millisecond:0.001,milliseconds:0.001,
+    s:1,sec:1,second:1,seconds:1,
+    min:60,minute:60,minutes:60,
+    hr:3600,hour:3600,hours:3600,
+    day:86400,days:86400,
+    week:604800,weeks:604800,
+  },
+  volume: {
+    ml:1,milliliter:1,milliliters:1,
+    l:1000,liter:1000,liters:1000,
+    tsp:4.929,teaspoon:4.929,teaspoons:4.929,
+    tbsp:14.787,tablespoon:14.787,tablespoons:14.787,
+    floz:29.574,cup:236.588,cups:236.588,
+    pt:473.176,pint:473.176,pints:473.176,
+    qt:946.353,quart:946.353,quarts:946.353,
+    gal:3785.41,gallon:3785.41,gallons:3785.41,
+  },
+};
+
+const UNIT_LOOKUP = Object.create(null);
+for (const [dim, units] of Object.entries(UNIT_TABLE)) {
+  for (const [name, factor] of Object.entries(units)) {
+    UNIT_LOOKUP[name] = [dim, factor];
+  }
+}
+
+function convertTemperature(value, fromKey, toKey) {
+  let k;
+  if (fromKey === "c") k = value + 273.15;
+  else if (fromKey === "f") k = (value - 32) * 5 / 9 + 273.15;
+  else k = value;
+  if (toKey === "c") return k - 273.15;
+  if (toKey === "f") return (k - 273.15) * 9 / 5 + 32;
+  return k;
+}
+
 function tokenize(text) {
   const tokens = [];
   let i = 0;
@@ -235,7 +307,7 @@ class Parser {
 }
 
 function evaluateLine(text, variables) {
-  const tokens = tokenize(text);
+  let tokens = tokenize(text);
   if (tokens.some(t => t[0] === "TOTAL")) return ["TOTAL", variables];
   const allVars = Object.create(null);
   for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
@@ -249,6 +321,28 @@ function evaluateLine(text, variables) {
   if (tokens.length >= 3 && tokens[0][0] === "WORD" && tokens[1][0] === "EQ") {
     varName = tokens[0][1].toLowerCase();
     pos = 2;
+  }
+  // Detect unit conversion suffix: ... <from_unit> in|to <to_unit> EOF
+  let conversion = null;
+  const eofIdx = tokens.length - 1;
+  if (eofIdx >= 4) {
+    const tTo = tokens[eofIdx - 1];
+    const tKw = tokens[eofIdx - 2];
+    const tFr = tokens[eofIdx - 3];
+    if ((tTo[0] === "WORD" || tTo[0] === "FUNC")
+        && tKw[0] === "WORD" && (tKw[1].toLowerCase() === "in" || tKw[1].toLowerCase() === "to")
+        && (tFr[0] === "WORD" || tFr[0] === "FUNC")) {
+      const frName = tFr[1].toLowerCase();
+      const toName = tTo[1].toLowerCase();
+      if (frName in UNIT_LOOKUP && toName in UNIT_LOOKUP) {
+        const [frDim, frFactor] = UNIT_LOOKUP[frName];
+        const [toDim, toFactor] = UNIT_LOOKUP[toName];
+        if (frDim === toDim) {
+          conversion = [frDim, frFactor, toFactor];
+          tokens = [...tokens.slice(0, eofIdx - 3), tokens[eofIdx]];
+        }
+      }
+    }
   }
   const mathTokens = [];
   for (let j = pos; j < tokens.length; j++) {
@@ -264,8 +358,16 @@ function evaluateLine(text, variables) {
   }
   try {
     const parser = new Parser(mathTokens);
-    const result = parser.parseExpr();
+    let result = parser.parseExpr();
     if (parser.peek()[0] !== "EOF") return [null, variables];
+    if (conversion !== null) {
+      const [dim, fromFactor, toFactor] = conversion;
+      if (dim === "temperature") {
+        result = convertTemperature(result, fromFactor, toFactor);
+      } else {
+        result = result * fromFactor / toFactor;
+      }
+    }
     if (varName) {
       const newVars = Object.create(null);
       for (const k in variables) newVars[k] = variables[k];
