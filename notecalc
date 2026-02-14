@@ -300,8 +300,8 @@ def format_result(n, fmt_opts=None):
     return str(n)
 
 
-def process_file(filepath):
-    """Read, evaluate, and write back the file with results."""
+def process_file(filepath, show=False):
+    """Read, evaluate, and write back the file with results (or print to stdout)."""
     with open(filepath, "r") as f:
         original = f.read()
 
@@ -386,6 +386,9 @@ def process_file(filepath):
             output.append(clean)
 
     new_content = "\n".join(output) + "\n"
+    if show:
+        sys.stdout.write(new_content)
+        return new_content != original
     if new_content != original:
         with open(filepath, "w") as f:
             f.write(new_content)
@@ -393,23 +396,27 @@ def process_file(filepath):
     return False
 
 
-def watch_file(filepath, interval=0.5):
+def watch_file(filepath, show=False, interval=0.5):
     """Watch file for changes and re-process."""
     last_mtime = os.path.getmtime(filepath)
-    print(f"Watching {filepath} for changes... (Ctrl+C to stop)")
+    print(f"Watching {filepath} for changes... (Ctrl+C to stop)", file=sys.stderr)
     try:
         while True:
             try:
                 mtime = os.path.getmtime(filepath)
                 if mtime != last_mtime:
-                    if process_file(filepath):
-                        print(f"  Updated results.")
+                    if show:
+                        sys.stderr.write("\033[2J\033[H")
+                        sys.stderr.flush()
+                    if process_file(filepath, show=show):
+                        if not show:
+                            print(f"  Updated results.")
                     last_mtime = os.path.getmtime(filepath)
             except FileNotFoundError:
                 pass
             time.sleep(interval)
     except KeyboardInterrupt:
-        print("\nStopped.")
+        print("\nStopped.", file=sys.stderr)
 
 
 def main():
@@ -421,16 +428,22 @@ def main():
     parser.add_argument(
         "-w", "--watch", action="store_true", help="watch for changes and auto-update"
     )
+    parser.add_argument(
+        "-s", "--show", action="store_true", help="print result to stdout instead of updating the file"
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.file):
         print(f"Error: {args.file} not found", file=sys.stderr)
         sys.exit(1)
 
-    process_file(args.file)
+    if args.show and args.watch:
+        sys.stderr.write("\033[2J\033[H")
+        sys.stderr.flush()
+    process_file(args.file, show=args.show)
 
     if args.watch:
-        watch_file(args.file)
+        watch_file(args.file, show=args.show)
 
 
 if __name__ == "__main__":
