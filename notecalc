@@ -8,6 +8,33 @@ import sys
 import time
 
 RESULT_RE = re.compile(r"\s{2,}# => .*$")
+DIRECTIVE_RE = re.compile(r"^@(format|commas)\s*=\s*(.+)$", re.IGNORECASE)
+FORMAT_RE = re.compile(r"^(minSig|fixed|scientific|auto)(?:\((\d+)\))?$", re.IGNORECASE)
+
+# SI prefixes (case-sensitive: M=mega, m=milli)
+SI_PREFIX = {
+    "Q": 1e30,   # quetta
+    "R": 1e27,   # ronna
+    "Y": 1e24,   # yotta
+    "Z": 1e21,   # zetta
+    "E": 1e18,   # exa
+    "P": 1e15,   # peta
+    "T": 1e12,   # tera
+    "G": 1e9,    # giga
+    "M": 1e6,    # mega
+    "K": 1e3,    # kilo (unofficial but common)
+    "k": 1e3,    # kilo
+    "m": 1e-3,   # milli
+    "u": 1e-6,   # micro (ASCII)
+    "μ": 1e-6,   # micro
+    "n": 1e-9,   # nano
+    "p": 1e-12,  # pico
+    "f": 1e-15,  # femto
+    "a": 1e-18,  # atto
+    "z": 1e-21,  # zepto
+    "y": 1e-24,  # yocto
+}
+SI_SUFFIX_RE = "[" + re.escape("".join(SI_PREFIX.keys())) + "]"
 
 
 class ParseError(Exception):
@@ -24,14 +51,14 @@ def tokenize(text):
             i += 1
             continue
 
-        # Numbers: 1,000 or 1_000 or 1.5 or .5 with optional k/M suffix
-        m = re.match(r"(\d[\d,_]*\.?\d*|\.\d+)([kKmM])?", text[i:])
+        # Numbers: 1,000 or 1_000 or 1.5 or .5 with optional SI prefix suffix
+        m = re.match(r"(\d[\d,_]*\.?\d*|\.\d+)(" + SI_SUFFIX_RE + r")?", text[i:])
         if m and m.group(1):
             raw = m.group(1).replace(",", "").replace("_", "")
             val = float(raw)
             suffix = m.group(2)
             if suffix:
-                val *= 1_000 if suffix.lower() == "k" else 1_000_000
+                val *= SI_PREFIX[suffix]
             end = i + m.end()
             if end < n and text[end] == "%":
                 tokens.append(("PCT", val))
@@ -225,15 +252,41 @@ def evaluate_line(text, variables):
         return None, variables
 
 
-def format_result(n):
-    """Format a number for display."""
-    rounded = round(n, 6)
-    if rounded == 0:
-        return "0"
-    if float(rounded).is_integer():
-        return f"{int(rounded):,}"
-    s = f"{rounded:,.6f}".rstrip("0").rstrip(".")
-    return s
+def format_result(n, fmt_opts=None):
+    """Format a number according to fmt_opts."""
+    if fmt_opts is None:
+        fmt_opts = {"mode": "minSig", "precision": 3, "commas": True}
+    mode = fmt_opts["mode"]
+    prec = fmt_opts["precision"]
+    commas = fmt_opts["commas"]
+
+    if mode == "minSig":
+        if n == 0:
+            s = "0"
+        else:
+            from math import log10, floor
+            show_dec = max(-floor(log10(abs(n)) + 1) + prec, 0)
+            rounded = round(n, show_dec)
+            if show_dec == 0:
+                s = f"{int(rounded):,}" if commas else str(int(rounded))
+            else:
+                s = f"{rounded:,.{show_dec}f}" if commas else f"{rounded:.{show_dec}f}"
+                s = s.rstrip("0").rstrip(".")
+        return s
+
+    if mode == "fixed":
+        if commas:
+            return f"{n:,.{prec}f}"
+        return f"{n:.{prec}f}"
+
+    if mode == "scientific":
+        # prec = sig figs; Python's e format takes decimal places = sig figs - 1
+        return f"{n:.{max(prec - 1, 0)}e}"
+
+    if mode == "auto":
+        return f"{n:.{prec}g}"
+
+    return str(n)
 
 
 def process_file(filepath):
@@ -248,22 +301,46 @@ def process_file(filepath):
 
     variables = {}
     results_acc = []  # for total/sum accumulation
-    evaluated = []  # list of (clean_line, result_or_none)
+    fmt_opts = {"mode": "minSig", "precision": 3, "commas": True}
+    evaluated = []  # list of (clean_line, result_or_none, fmt_opts_snapshot)
 
     for line in lines:
         clean = RESULT_RE.sub("", line).rstrip()
         stripped = clean.strip()
 
+        # Check for format directives
+        dm = DIRECTIVE_RE.match(stripped)
+        if dm:
+            key = dm.group(1).lower()
+            val = dm.group(2).strip()
+            if key == "format":
+                fm = FORMAT_RE.match(val)
+                if fm:
+                    mode = fm.group(1).lower()
+                    # Normalize mode name
+                    mode_map = {"minsig": "minSig", "fixed": "fixed",
+                                "scientific": "scientific", "auto": "auto"}
+                    fmt_opts["mode"] = mode_map.get(mode, mode)
+                    if fm.group(2) is not None:
+                        fmt_opts["precision"] = int(fm.group(2))
+                    else:
+                        # defaults: scientific/auto default to 3
+                        fmt_opts["precision"] = 3
+            elif key == "commas":
+                fmt_opts["commas"] = val.lower() in ("on", "true", "yes")
+            evaluated.append((clean, None, None))
+            continue
+
         # Header lines reset the accumulator
         if stripped.startswith("#"):
             results_acc.clear()
-            evaluated.append((clean, None))
+            evaluated.append((clean, None, None))
             continue
 
         # Empty lines
         if not stripped:
             results_acc.append(None)
-            evaluated.append(("", None))
+            evaluated.append(("", None, None))
             continue
 
         result, variables = evaluate_line(stripped, variables)
@@ -271,16 +348,16 @@ def process_file(filepath):
         if result == "TOTAL":
             total = sum(r for r in results_acc if r is not None)
             results_acc.append(total)
-            evaluated.append((clean, total))
+            evaluated.append((clean, total, dict(fmt_opts)))
         elif result is not None:
             results_acc.append(result)
-            evaluated.append((clean, result))
+            evaluated.append((clean, result, dict(fmt_opts)))
         else:
             results_acc.append(None)
-            evaluated.append((clean, None))
+            evaluated.append((clean, None, None))
 
     # Compute alignment column from longest line that has a result
-    result_lines = [c for c, r in evaluated if r is not None]
+    result_lines = [c for c, r, _ in evaluated if r is not None]
     if result_lines:
         max_len = max(len(l) for l in result_lines)
         align = max(max_len + 2, 40)
@@ -289,9 +366,9 @@ def process_file(filepath):
 
     # Format output
     output = []
-    for clean, result in evaluated:
+    for clean, result, opts in evaluated:
         if result is not None:
-            output.append(f"{clean.ljust(align)}# => {format_result(result)}")
+            output.append(f"{clean.ljust(align)}# => {format_result(result, opts)}")
         else:
             output.append(clean)
 
