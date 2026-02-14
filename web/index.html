@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>notecalc</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #1e1e2e;
+  --surface: #181825;
+  --border: #313244;
+  --text: #cdd6f4;
+  --dim: #6c7086;
+  --green: #a6e3a1;
+  --header-bg: #11111b;
+  --accent: #89b4fa;
+}
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace; }
+body { display: flex; flex-direction: column; }
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 20px; background: var(--header-bg); border-bottom: 1px solid var(--border);
+}
+header h1 { font-size: 16px; font-weight: 600; color: var(--dim); }
+#share-btn {
+  background: var(--border); color: var(--text); border: none; padding: 6px 14px;
+  border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 13px;
+}
+#share-btn:hover { background: var(--accent); color: var(--header-bg); }
+#share-btn.copied { background: var(--green); color: var(--header-bg); }
+.editor-wrap {
+  flex: 1; display: flex; overflow: hidden; position: relative;
+}
+#input {
+  flex: 1; background: var(--surface); color: var(--text); border: none; resize: none;
+  padding: 12px 16px; font: inherit; font-size: 14px; line-height: 24px;
+  outline: none; overflow-y: auto; white-space: pre; tab-size: 4;
+}
+#input::placeholder { color: var(--dim); }
+#results {
+  width: 200px; min-width: 120px; background: var(--surface);
+  border-left: 1px solid var(--border); padding: 12px 16px;
+  overflow-y: auto; user-select: none;
+}
+.result-line {
+  height: 24px; line-height: 24px; text-align: right;
+  color: var(--green); font-size: 14px; white-space: nowrap; overflow: hidden;
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>notecalc</h1>
+  <button id="share-btn" onclick="shareURL()">Share</button>
+</header>
+<div class="editor-wrap">
+  <textarea id="input" spellcheck="false" placeholder="rent 1500&#10;groceries 200 + 150&#10;utilities 80 + 45&#10;total"></textarea>
+  <div id="results"></div>
+</div>
+
+<!-- BEGIN NOTECALC ENGINE -->
+<script>
+// --- SI Prefixes ---
+const SI_PREFIX = {
+  "Q":1e30,"R":1e27,"Y":1e24,"Z":1e21,"E":1e18,"P":1e15,"T":1e12,
+  "G":1e9,"M":1e6,"K":1e3,"k":1e3,"m":1e-3,"u":1e-6,"\u03bc":1e-6,
+  "n":1e-9,"p":1e-12,"f":1e-15,"a":1e-18,"z":1e-21,"y":1e-24
+};
+const SI_SUFFIX_CHARS = Object.keys(SI_PREFIX).join("").replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+const NUM_RE = new RegExp("^(\\d[\\d,_]*\\.?\\d*|\\.\\d+)(?:([eE][+-]?\\d+)|([" + SI_SUFFIX_CHARS + "]))?");
+
+function tokenize(text) {
+  const tokens = [];
+  let i = 0;
+  const n = text.length;
+  while (i < n) {
+    if (text[i] === ' ' || text[i] === '\t') { i++; continue; }
+    const start = i;
+    const slice = text.substring(i);
+    const m = slice.match(NUM_RE);
+    if (m && m[1]) {
+      const raw = m[1].replace(/,/g, "").replace(/_/g, "");
+      const exp = m[2];
+      let val = exp ? parseFloat(raw + exp) : parseFloat(raw);
+      const suffix = m[3];
+      if (suffix) val *= SI_PREFIX[suffix];
+      const end = i + m[0].length;
+      if (end < n && text[end] === "%") {
+        tokens.push(["PCT", val, start, end + 1]);
+        i = end + 1;
+      } else {
+        tokens.push(["NUM", val, start, end]);
+        i = end;
+      }
+      continue;
+    }
+    if (text[i] === "+" || text[i] === "-") { tokens.push(["ADDOP", text[i], start, i+1]); i++; continue; }
+    if (text[i] === "*" || text[i] === "/") { tokens.push(["MULOP", text[i], start, i+1]); i++; continue; }
+    if (text[i] === "^") { tokens.push(["POW", "^", start, i+1]); i++; continue; }
+    if (text[i] === "%") { tokens.push(["MULOP", "%", start, i+1]); i++; continue; }
+    if (text[i] === "(") { tokens.push(["LPAREN", "(", start, i+1]); i++; continue; }
+    if (text[i] === ")") { tokens.push(["RPAREN", ")", start, i+1]); i++; continue; }
+    if (text[i] === "=") { tokens.push(["EQ", "=", start, i+1]); i++; continue; }
+    const wm = slice.match(/^[a-zA-Z_]\w*/);
+    if (wm) {
+      const word = wm[0];
+      const wl = word.toLowerCase();
+      const end = i + wm[0].length;
+      if (wl === "of") tokens.push(["OF", "of", start, end]);
+      else if (wl === "total" || wl === "sum") tokens.push(["TOTAL", wl, start, end]);
+      else tokens.push(["WORD", word, start, end]);
+      i = end;
+      continue;
+    }
+    i++;
+  }
+  tokens.push(["EOF", null, n, n]);
+  return tokens;
+}
+
+class Parser {
+  constructor(tokens) { this.tokens = tokens; this.pos = 0; }
+  peek() { return this.pos < this.tokens.length ? this.tokens[this.pos] : ["EOF", null]; }
+  consume() { return this.tokens[this.pos++]; }
+  parseExpr() {
+    let left = this.parseTerm();
+    while (this.peek()[0] === "ADDOP") {
+      const op = this.consume()[1];
+      if (this.peek()[0] === "PCT") {
+        const pct = this.consume()[1];
+        left = op === "+" ? left * (1 + pct / 100) : left * (1 - pct / 100);
+      } else {
+        const right = this.parseTerm();
+        left = op === "+" ? left + right : left - right;
+      }
+    }
+    return left;
+  }
+  parseTerm() {
+    let left = this.parsePower();
+    while (this.peek()[0] === "MULOP") {
+      const op = this.consume()[1];
+      const right = this.parsePower();
+      if (op === "*") left *= right;
+      else if (op === "/") { if (right === 0) throw new Error("division by zero"); left /= right; }
+      else if (op === "%") { if (right === 0) throw new Error("division by zero"); left %= right; }
+    }
+    return left;
+  }
+  parsePower() {
+    let base = this.parseUnary();
+    if (this.peek()[0] === "POW") { this.consume(); const exp = this.parseUnary(); return Math.pow(base, exp); }
+    return base;
+  }
+  parseUnary() {
+    if (this.peek()[0] === "ADDOP") {
+      const op = this.consume()[1];
+      const val = this.parsePrimary();
+      return op === "-" ? -val : val;
+    }
+    return this.parsePrimary();
+  }
+  parsePrimary() {
+    const t = this.peek();
+    if (t[0] === "NUM") { this.consume(); return t[1]; }
+    if (t[0] === "PCT") {
+      this.consume();
+      const pct = t[1];
+      if (this.peek()[0] === "OF") { this.consume(); const base = this.parseExpr(); return pct / 100 * base; }
+      return pct / 100;
+    }
+    if (t[0] === "LPAREN") {
+      this.consume();
+      const val = this.parseExpr();
+      if (this.peek()[0] !== "RPAREN") throw new Error("Missing )");
+      this.consume();
+      return val;
+    }
+    throw new Error("Unexpected: " + t[0]);
+  }
+}
+
+function evaluateLine(text, variables) {
+  const tokens = tokenize(text);
+  if (tokens.some(t => t[0] === "TOTAL")) return ["TOTAL", variables];
+  const hasValue = tokens.some(t =>
+    t[0] === "NUM" || t[0] === "PCT" || (t[0] === "WORD" && t[1].toLowerCase() in variables)
+  );
+  if (!hasValue) return [null, variables];
+  let pos = 0;
+  let varName = null;
+  if (tokens.length >= 3 && tokens[0][0] === "WORD" && tokens[1][0] === "EQ") {
+    varName = tokens[0][1].toLowerCase();
+    pos = 2;
+  }
+  const mathTokens = [];
+  for (let j = pos; j < tokens.length; j++) {
+    const t = tokens[j];
+    if (t[0] === "WORD") {
+      const wl = t[1].toLowerCase();
+      if (wl in variables) mathTokens.push(["NUM", variables[wl]]);
+    } else if (t[0] === "EQ") {
+      // skip
+    } else {
+      mathTokens.push(t);
+    }
+  }
+  try {
+    const parser = new Parser(mathTokens);
+    const result = parser.parseExpr();
+    if (parser.peek()[0] !== "EOF") return [null, variables];
+    if (varName) {
+      const newVars = Object.create(null);
+      for (const k in variables) newVars[k] = variables[k];
+      newVars[varName] = result;
+      return [result, newVars];
+    }
+    return [result, variables];
+  } catch (e) {
+    return [null, variables];
+  }
+}
+
+function addCommas(s) {
+  const parts = s.split(".");
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return parts.join(".");
+}
+
+function formatResult(n, fmtOpts) {
+  if (!fmtOpts) fmtOpts = { mode: "minSig", precision: 3, separator: "underscore" };
+  const mode = fmtOpts.mode;
+  const prec = fmtOpts.precision;
+  const sep = fmtOpts.separator;
+  function applySep(s) {
+    if (sep === "comma") return s;
+    if (sep === "underscore") return s.replace(/,/g, "_");
+    if (sep === "space") return s.replace(/,/g, " ");
+    return s.replace(/,/g, "");
+  }
+  if (mode === "minSig") {
+    if (n === 0) return applySep("0");
+    const showDec = Math.max(-Math.floor(Math.log10(Math.abs(n)) + 1) + prec, 0);
+    const rounded = parseFloat(n.toFixed(showDec));
+    let s;
+    if (showDec === 0) {
+      s = addCommas(Math.round(rounded).toString());
+    } else {
+      s = addCommas(rounded.toFixed(showDec));
+      s = s.replace(/0+$/, "").replace(/\.$/, "");
+    }
+    return applySep(s);
+  }
+  if (mode === "fixed") {
+    return applySep(addCommas(n.toFixed(prec)));
+  }
+  if (mode === "scientific") {
+    const decPlaces = Math.max(prec - 1, 0);
+    // Pad exponent to 2 digits to match Python's format
+    return n.toExponential(decPlaces).replace(/e([+-])(\d)$/, "e$1" + "0$2");
+  }
+  if (mode === "auto") {
+    return n.toPrecision(prec);
+  }
+  return String(n);
+}
+
+const DIRECTIVE_RE = /^@(format|separator)\s*=\s*(.+)$/i;
+const FORMAT_RE = /^(minSig|fixed|scientific|auto)(?:\((\d+)\))?$/i;
+
+function processText(text) {
+  const lines = text.split("\n");
+  let variables = Object.create(null);
+  let resultsAcc = [];
+  let fmtOpts = { mode: "minSig", precision: 3, separator: "underscore" };
+  const output = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const stripped = line.trim();
+    const dm = stripped.match(DIRECTIVE_RE);
+    if (dm) {
+      const key = dm[1].toLowerCase();
+      const val = dm[2].trim();
+      if (key === "format") {
+        const fm = val.match(FORMAT_RE);
+        if (fm) {
+          const modeRaw = fm[1].toLowerCase();
+          const modeMap = { minsig: "minSig", fixed: "fixed", scientific: "scientific", auto: "auto" };
+          fmtOpts.mode = modeMap[modeRaw] || modeRaw;
+          fmtOpts.precision = fm[2] !== undefined ? parseInt(fm[2]) : 3;
+        }
+      } else if (key === "separator") {
+        const v = val.toLowerCase();
+        if (["off","underscore","comma","space"].includes(v)) fmtOpts.separator = v;
+      }
+      output.push({ result: null });
+      continue;
+    }
+    if (stripped.startsWith("#")) {
+      resultsAcc = [];
+      output.push({ result: null });
+      continue;
+    }
+    if (!stripped) {
+      resultsAcc.push(null);
+      output.push({ result: null });
+      continue;
+    }
+    const [result, newVars] = evaluateLine(stripped, variables);
+    variables = newVars;
+    if (result === "TOTAL") {
+      const total = resultsAcc.reduce((s, r) => s + (r !== null ? r : 0), 0);
+      resultsAcc.push(total);
+      output.push({ result: formatResult(total, { ...fmtOpts }) });
+    } else if (result !== null) {
+      resultsAcc.push(result);
+      output.push({ result: formatResult(result, { ...fmtOpts }) });
+    } else {
+      resultsAcc.push(null);
+      output.push({ result: null });
+    }
+  }
+  return output;
+}
+// END NOTECALC ENGINE
+</script>
+
+<script>
+// --- UI Wiring ---
+const input = document.getElementById("input");
+const results = document.getElementById("results");
+const shareBtn = document.getElementById("share-btn");
+
+function render() {
+  const text = input.value;
+  const output = processText(text);
+  results.innerHTML = output.map(o =>
+    '<div class="result-line">' + (o.result !== null ? escapeHTML(o.result) : '') + '</div>'
+  ).join("");
+  scheduleHashUpdate();
+}
+
+function escapeHTML(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+input.addEventListener("input", render);
+input.addEventListener("scroll", () => { results.scrollTop = input.scrollTop; });
+
+// --- URL Hash Encoding ---
+let hashTimer = null;
+function scheduleHashUpdate() {
+  clearTimeout(hashTimer);
+  hashTimer = setTimeout(() => updateHash(), 300);
+}
+
+async function compressText(text) {
+  if (typeof CompressionStream === "undefined") {
+    return "b64." + btoa(unescape(encodeURIComponent(text)));
+  }
+  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+  const buf = await new Response(stream).arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function decompressText(hash) {
+  if (hash.startsWith("b64.")) {
+    return decodeURIComponent(escape(atob(hash.slice(4))));
+  }
+  const binary = atob(hash.replace(/-/g, "+").replace(/_/g, "/"));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  if (typeof DecompressionStream === "undefined") {
+    return decodeURIComponent(escape(atob(hash)));
+  }
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return await new Response(stream).text();
+}
+
+async function updateHash() {
+  const text = input.value;
+  if (!text) { history.replaceState(null, "", location.pathname); return; }
+  const encoded = await compressText(text);
+  history.replaceState(null, "", "#" + encoded);
+}
+
+async function loadFromHash() {
+  const hash = location.hash.slice(1);
+  if (!hash) return;
+  try {
+    input.value = await decompressText(hash);
+    render();
+  } catch (e) {
+    console.error("Failed to decode URL hash:", e);
+  }
+}
+
+function shareURL() {
+  navigator.clipboard.writeText(location.href).then(() => {
+    shareBtn.textContent = "Copied!";
+    shareBtn.classList.add("copied");
+    setTimeout(() => { shareBtn.textContent = "Share"; shareBtn.classList.remove("copied"); }, 1500);
+  });
+}
+
+loadFromHash();
+</script>
+</body>
+</html>
