@@ -1,0 +1,347 @@
+#!/usr/bin/env python3
+"""notecalc - a notepad calculator that updates files with results."""
+
+import argparse
+import os
+import re
+import sys
+import time
+
+RESULT_RE = re.compile(r"\s{2,}# => .*$")
+
+
+class ParseError(Exception):
+    pass
+
+
+def tokenize(text):
+    """Tokenize text into math-relevant tokens, preserving words."""
+    tokens = []
+    i = 0
+    n = len(text)
+    while i < n:
+        if text[i].isspace():
+            i += 1
+            continue
+
+        # Numbers: 1,000 or 1_000 or 1.5 or .5 with optional k/M suffix
+        m = re.match(r"(\d[\d,_]*\.?\d*|\.\d+)([kKmM])?", text[i:])
+        if m and m.group(1):
+            raw = m.group(1).replace(",", "").replace("_", "")
+            val = float(raw)
+            suffix = m.group(2)
+            if suffix:
+                val *= 1_000 if suffix.lower() == "k" else 1_000_000
+            end = i + m.end()
+            if end < n and text[end] == "%":
+                tokens.append(("PCT", val))
+                i = end + 1
+            else:
+                tokens.append(("NUM", val))
+                i = end
+            continue
+
+        if text[i] in "+-":
+            tokens.append(("ADDOP", text[i]))
+            i += 1
+            continue
+        if text[i] in "*/":
+            tokens.append(("MULOP", text[i]))
+            i += 1
+            continue
+        if text[i] == "^":
+            tokens.append(("POW", "^"))
+            i += 1
+            continue
+        if text[i] == "%":
+            tokens.append(("MULOP", "%"))  # modulo when standalone
+            i += 1
+            continue
+        if text[i] == "(":
+            tokens.append(("LPAREN", "("))
+            i += 1
+            continue
+        if text[i] == ")":
+            tokens.append(("RPAREN", ")"))
+            i += 1
+            continue
+        if text[i] == "=":
+            tokens.append(("EQ", "="))
+            i += 1
+            continue
+
+        # Words/identifiers
+        m = re.match(r"[a-zA-Z_]\w*", text[i:])
+        if m:
+            word = m.group()
+            wl = word.lower()
+            if wl == "of":
+                tokens.append(("OF", "of"))
+            elif wl in ("total", "sum"):
+                tokens.append(("TOTAL", wl))
+            else:
+                tokens.append(("WORD", word))
+            i += m.end()
+            continue
+
+        i += 1  # skip unknown chars
+
+    tokens.append(("EOF", None))
+    return tokens
+
+
+class Parser:
+    """Recursive descent parser for math expressions."""
+
+    def __init__(self, tokens):
+        self.tokens = tokens
+        self.pos = 0
+
+    def peek(self):
+        return self.tokens[self.pos] if self.pos < len(self.tokens) else ("EOF", None)
+
+    def consume(self):
+        tok = self.tokens[self.pos]
+        self.pos += 1
+        return tok
+
+    def parse_expr(self):
+        left = self.parse_term()
+        while self.peek()[0] == "ADDOP":
+            op = self.consume()[1]
+            # Handle percentage: 100 + 25% means 100 * 1.25
+            if self.peek()[0] == "PCT":
+                pct = self.consume()[1]
+                if op == "+":
+                    left *= 1 + pct / 100
+                else:
+                    left *= 1 - pct / 100
+            else:
+                right = self.parse_term()
+                left = left + right if op == "+" else left - right
+        return left
+
+    def parse_term(self):
+        left = self.parse_power()
+        while self.peek()[0] == "MULOP":
+            op = self.consume()[1]
+            right = self.parse_power()
+            if op == "*":
+                left *= right
+            elif op == "/":
+                if right == 0:
+                    raise ZeroDivisionError
+                left /= right
+            elif op == "%":
+                if right == 0:
+                    raise ZeroDivisionError
+                left %= right
+        return left
+
+    def parse_power(self):
+        base = self.parse_unary()
+        if self.peek()[0] == "POW":
+            self.consume()
+            exp = self.parse_unary()
+            return base**exp
+        return base
+
+    def parse_unary(self):
+        if self.peek()[0] == "ADDOP":
+            op = self.consume()[1]
+            val = self.parse_primary()
+            return -val if op == "-" else val
+        return self.parse_primary()
+
+    def parse_primary(self):
+        t = self.peek()
+        if t[0] == "NUM":
+            self.consume()
+            return t[1]
+        if t[0] == "PCT":
+            self.consume()
+            pct = t[1]
+            if self.peek()[0] == "OF":
+                self.consume()
+                base = self.parse_expr()
+                return pct / 100 * base
+            return pct / 100  # standalone percentage
+        if t[0] == "LPAREN":
+            self.consume()
+            val = self.parse_expr()
+            if self.peek()[0] != "RPAREN":
+                raise ParseError("Missing )")
+            self.consume()
+            return val
+        raise ParseError(f"Unexpected: {t}")
+
+
+def evaluate_line(text, variables):
+    """Evaluate a line. Returns (result, variables) or (None, variables)."""
+    tokens = tokenize(text)
+
+    # Check for total/sum
+    if any(t[0] == "TOTAL" for t in tokens):
+        return "TOTAL", variables
+
+    # Must have at least one number or variable reference
+    has_value = any(
+        t[0] in ("NUM", "PCT")
+        or (t[0] == "WORD" and t[1].lower() in variables)
+        for t in tokens
+    )
+    if not has_value:
+        return None, variables
+
+    # Check for variable assignment: WORD = ...
+    pos = 0
+    var_name = None
+    if len(tokens) >= 3 and tokens[0][0] == "WORD" and tokens[1][0] == "EQ":
+        var_name = tokens[0][1].lower()
+        pos = 2
+
+    # Build math token list (resolve variables, skip plain words)
+    math_tokens = []
+    for t in tokens[pos:]:
+        if t[0] == "WORD":
+            wl = t[1].lower()
+            if wl in variables:
+                math_tokens.append(("NUM", variables[wl]))
+            # else skip
+        elif t[0] == "EQ":
+            pass  # skip stray equals
+        else:
+            math_tokens.append(t)
+
+    try:
+        parser = Parser(math_tokens)
+        result = parser.parse_expr()
+        if parser.peek()[0] != "EOF":
+            return None, variables  # leftover tokens = ambiguous
+        if var_name:
+            variables = {**variables, var_name: result}
+        return result, variables
+    except (ParseError, ZeroDivisionError, ValueError, OverflowError):
+        return None, variables
+
+
+def format_result(n):
+    """Format a number for display."""
+    rounded = round(n, 6)
+    if rounded == 0:
+        return "0"
+    if float(rounded).is_integer():
+        return f"{int(rounded):,}"
+    s = f"{rounded:,.6f}".rstrip("0").rstrip(".")
+    return s
+
+
+def process_file(filepath):
+    """Read, evaluate, and write back the file with results."""
+    with open(filepath, "r") as f:
+        original = f.read()
+
+    lines = original.split("\n")
+    # Remove trailing empty element from split (file ended with \n)
+    if lines and lines[-1] == "":
+        lines = lines[:-1]
+
+    variables = {}
+    results_acc = []  # for total/sum accumulation
+    evaluated = []  # list of (clean_line, result_or_none)
+
+    for line in lines:
+        clean = RESULT_RE.sub("", line).rstrip()
+        stripped = clean.strip()
+
+        # Header lines reset the accumulator
+        if stripped.startswith("#"):
+            results_acc.clear()
+            evaluated.append((clean, None))
+            continue
+
+        # Empty lines
+        if not stripped:
+            results_acc.append(None)
+            evaluated.append(("", None))
+            continue
+
+        result, variables = evaluate_line(stripped, variables)
+
+        if result == "TOTAL":
+            total = sum(r for r in results_acc if r is not None)
+            results_acc.append(total)
+            evaluated.append((clean, total))
+        elif result is not None:
+            results_acc.append(result)
+            evaluated.append((clean, result))
+        else:
+            results_acc.append(None)
+            evaluated.append((clean, None))
+
+    # Compute alignment column from longest line that has a result
+    result_lines = [c for c, r in evaluated if r is not None]
+    if result_lines:
+        max_len = max(len(l) for l in result_lines)
+        align = max(max_len + 2, 40)
+    else:
+        align = 40
+
+    # Format output
+    output = []
+    for clean, result in evaluated:
+        if result is not None:
+            output.append(f"{clean.ljust(align)}# => {format_result(result)}")
+        else:
+            output.append(clean)
+
+    new_content = "\n".join(output) + "\n"
+    if new_content != original:
+        with open(filepath, "w") as f:
+            f.write(new_content)
+        return True
+    return False
+
+
+def watch_file(filepath, interval=0.5):
+    """Watch file for changes and re-process."""
+    last_mtime = os.path.getmtime(filepath)
+    print(f"Watching {filepath} for changes... (Ctrl+C to stop)")
+    try:
+        while True:
+            try:
+                mtime = os.path.getmtime(filepath)
+                if mtime != last_mtime:
+                    if process_file(filepath):
+                        print(f"  Updated results.")
+                    last_mtime = os.path.getmtime(filepath)
+            except FileNotFoundError:
+                pass
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        print("\nStopped.")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="notecalc",
+        description="A notepad calculator that evaluates expressions in text files.",
+    )
+    parser.add_argument("file", help="path to .nc file")
+    parser.add_argument(
+        "-w", "--watch", action="store_true", help="watch for changes and auto-update"
+    )
+    args = parser.parse_args()
+
+    if not os.path.exists(args.file):
+        print(f"Error: {args.file} not found", file=sys.stderr)
+        sys.exit(1)
+
+    process_file(args.file)
+
+    if args.watch:
+        watch_file(args.file)
+
+
+if __name__ == "__main__":
+    main()
