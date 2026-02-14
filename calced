@@ -2,6 +2,7 @@
 """calced - a notepad calculator that updates files with results."""
 
 import argparse
+import math
 import os
 import re
 import sys
@@ -36,6 +37,22 @@ SI_PREFIX = {
 }
 SI_SUFFIX_RE = "[" + re.escape("".join(SI_PREFIX.keys())) + "]"
 
+BUILTIN_FUNCS_1 = {
+    "sqrt": math.sqrt, "abs": abs, "floor": math.floor, "ceil": math.ceil,
+    "log": math.log, "log2": math.log2, "log10": math.log10,
+    "sin": math.sin, "cos": math.cos, "tan": math.tan,
+    "asin": math.asin, "acos": math.acos, "atan": math.atan,
+    "exp": math.exp,
+}
+BUILTIN_FUNCS_N = {
+    "round": lambda args: round(args[0]) if len(args) == 1 else round(args[0], int(args[1])),
+    "min": lambda args: min(args),
+    "max": lambda args: max(args),
+}
+BUILTIN_FUNC_NAMES = set(BUILTIN_FUNCS_1) | set(BUILTIN_FUNCS_N)
+
+BUILTIN_CONSTS = {"pi": math.pi, "e": math.e, "tau": math.tau}
+
 
 class ParseError(Exception):
     pass
@@ -53,8 +70,18 @@ def tokenize(text):
 
         start = i
 
+        # Hex/binary/octal: 0xFF, 0b1010, 0o77
+        if text[i] == "0" and i + 1 < n and text[i + 1] in "xXbBoO":
+            m = re.match(r"0[xX][0-9a-fA-F]+|0[bB][01]+|0[oO][0-7]+", text[i:])
+            if m:
+                val = float(int(m.group(), 0))
+                end = i + m.end()
+                tokens.append(("NUM", val, start, end))
+                i = end
+                continue
+
         # Numbers: 1,000 or 1_000 or 1.5 or .5 or 1.5e3 with optional SI suffix
-        m = re.match(r"(\d[\d,_]*\.?\d*|\.\d+)(?:([eE][+-]?\d+)|(" + SI_SUFFIX_RE + r"))?", text[i:])
+        m = re.match(r"(\d(?:\d|_|,(?=\d))*\.?\d*|\.\d+)(?:([eE][+-]?\d+)|(" + SI_SUFFIX_RE + r"))?", text[i:])
         if m and m.group(1):
             raw = m.group(1).replace(",", "").replace("_", "")
             exp = m.group(2)
@@ -98,6 +125,10 @@ def tokenize(text):
             tokens.append(("RPAREN", ")", start, i + 1))
             i += 1
             continue
+        if text[i] == ",":
+            tokens.append(("COMMA", ",", start, i + 1))
+            i += 1
+            continue
         if text[i] == "=":
             tokens.append(("EQ", "=", start, i + 1))
             i += 1
@@ -113,6 +144,8 @@ def tokenize(text):
                 tokens.append(("OF", "of", start, end))
             elif wl in ("total", "sum"):
                 tokens.append(("TOTAL", wl, start, end))
+            elif wl in BUILTIN_FUNC_NAMES:
+                tokens.append(("FUNC", wl, start, end))
             else:
                 tokens.append(("WORD", word, start, end))
             i = end
@@ -124,7 +157,7 @@ def tokenize(text):
     return tokens
 
 
-ACTIVE_TYPES = {"NUM", "PCT", "ADDOP", "MULOP", "POW", "LPAREN", "RPAREN", "EQ", "OF", "TOTAL"}
+ACTIVE_TYPES = {"NUM", "PCT", "ADDOP", "MULOP", "POW", "LPAREN", "RPAREN", "EQ", "OF", "TOTAL", "FUNC", "COMMA"}
 DIM = "\033[2m"
 BOLD = "\033[1m"
 GREEN = "\033[32m"
@@ -255,6 +288,25 @@ class Parser:
                 base = self.parse_expr()
                 return pct / 100 * base
             return pct / 100  # standalone percentage
+        if t[0] == "FUNC":
+            name = self.consume()[1]
+            if self.peek()[0] != "LPAREN":
+                raise ParseError(f"Expected ( after {name}")
+            self.consume()
+            args = [self.parse_expr()]
+            while self.peek()[0] == "COMMA":
+                self.consume()
+                args.append(self.parse_expr())
+            if self.peek()[0] != "RPAREN":
+                raise ParseError("Missing )")
+            self.consume()
+            if name in BUILTIN_FUNCS_1:
+                if len(args) != 1:
+                    raise ParseError(f"{name} takes 1 argument")
+                return BUILTIN_FUNCS_1[name](args[0])
+            if name in BUILTIN_FUNCS_N:
+                return BUILTIN_FUNCS_N[name](args)
+            raise ParseError(f"Unknown function: {name}")
         if t[0] == "LPAREN":
             self.consume()
             val = self.parse_expr()
@@ -273,10 +325,12 @@ def evaluate_line(text, variables):
     if any(t[0] == "TOTAL" for t in tokens):
         return "TOTAL", variables
 
-    # Must have at least one number or variable reference
+    all_vars = {**BUILTIN_CONSTS, **variables}
+
+    # Must have at least one number, variable reference, or function call
     has_value = any(
-        t[0] in ("NUM", "PCT")
-        or (t[0] == "WORD" and t[1].lower() in variables)
+        t[0] in ("NUM", "PCT", "FUNC")
+        or (t[0] == "WORD" and t[1].lower() in all_vars)
         for t in tokens
     )
     if not has_value:
@@ -294,8 +348,8 @@ def evaluate_line(text, variables):
     for t in tokens[pos:]:
         if t[0] == "WORD":
             wl = t[1].lower()
-            if wl in variables:
-                math_tokens.append(("NUM", variables[wl]))
+            if wl in all_vars:
+                math_tokens.append(("NUM", all_vars[wl]))
             # else skip
         elif t[0] == "EQ":
             pass  # skip stray equals

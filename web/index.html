@@ -77,7 +77,23 @@ const SI_PREFIX = {
   "n":1e-9,"p":1e-12,"f":1e-15,"a":1e-18,"z":1e-21,"y":1e-24
 };
 const SI_SUFFIX_CHARS = Object.keys(SI_PREFIX).join("").replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
-const NUM_RE = new RegExp("^(\\d[\\d,_]*\\.?\\d*|\\.\\d+)(?:([eE][+-]?\\d+)|([" + SI_SUFFIX_CHARS + "]))?");
+const NUM_RE = new RegExp("^(\\d(?:\\d|_|,(?=\\d))*\\.?\\d*|\\.\\d+)(?:([eE][+-]?\\d+)|([" + SI_SUFFIX_CHARS + "]))?");
+const HEX_BIN_OCT_RE = /^0[xX][0-9a-fA-F]+|^0[bB][01]+|^0[oO][0-7]+/;
+
+const BUILTIN_FUNCS_1 = {
+  sqrt: Math.sqrt, abs: Math.abs, floor: Math.floor, ceil: Math.ceil,
+  log: Math.log, log2: Math.log2, log10: Math.log10,
+  sin: Math.sin, cos: Math.cos, tan: Math.tan,
+  asin: Math.asin, acos: Math.acos, atan: Math.atan,
+  exp: Math.exp,
+};
+const BUILTIN_FUNCS_N = {
+  round: (args) => args.length === 1 ? Math.round(args[0]) : parseFloat(args[0].toFixed(args[1])),
+  min: (args) => Math.min(...args),
+  max: (args) => Math.max(...args),
+};
+const BUILTIN_FUNC_NAMES = new Set([...Object.keys(BUILTIN_FUNCS_1), ...Object.keys(BUILTIN_FUNCS_N)]);
+const BUILTIN_CONSTS = { pi: Math.PI, e: Math.E, tau: 2 * Math.PI };
 
 function tokenize(text) {
   const tokens = [];
@@ -87,6 +103,17 @@ function tokenize(text) {
     if (text[i] === ' ' || text[i] === '\t') { i++; continue; }
     const start = i;
     const slice = text.substring(i);
+    // Hex/binary/octal
+    if (text[i] === "0" && i + 1 < n && "xXbBoO".includes(text[i + 1])) {
+      const hm = slice.match(HEX_BIN_OCT_RE);
+      if (hm) {
+        const val = Number(hm[0]);
+        const end = i + hm[0].length;
+        tokens.push(["NUM", val, start, end]);
+        i = end;
+        continue;
+      }
+    }
     const m = slice.match(NUM_RE);
     if (m && m[1]) {
       const raw = m[1].replace(/,/g, "").replace(/_/g, "");
@@ -110,6 +137,7 @@ function tokenize(text) {
     if (text[i] === "%") { tokens.push(["MULOP", "%", start, i+1]); i++; continue; }
     if (text[i] === "(") { tokens.push(["LPAREN", "(", start, i+1]); i++; continue; }
     if (text[i] === ")") { tokens.push(["RPAREN", ")", start, i+1]); i++; continue; }
+    if (text[i] === ",") { tokens.push(["COMMA", ",", start, i+1]); i++; continue; }
     if (text[i] === "=") { tokens.push(["EQ", "=", start, i+1]); i++; continue; }
     const wm = slice.match(/^[a-zA-Z_]\w*/);
     if (wm) {
@@ -118,6 +146,7 @@ function tokenize(text) {
       const end = i + wm[0].length;
       if (wl === "of") tokens.push(["OF", "of", start, end]);
       else if (wl === "total" || wl === "sum") tokens.push(["TOTAL", wl, start, end]);
+      else if (BUILTIN_FUNC_NAMES.has(wl)) tokens.push(["FUNC", wl, start, end]);
       else tokens.push(["WORD", word, start, end]);
       i = end;
       continue;
@@ -179,6 +208,21 @@ class Parser {
       if (this.peek()[0] === "OF") { this.consume(); const base = this.parseExpr(); return pct / 100 * base; }
       return pct / 100;
     }
+    if (t[0] === "FUNC") {
+      const name = this.consume()[1];
+      if (this.peek()[0] !== "LPAREN") throw new Error("Expected ( after " + name);
+      this.consume();
+      const args = [this.parseExpr()];
+      while (this.peek()[0] === "COMMA") { this.consume(); args.push(this.parseExpr()); }
+      if (this.peek()[0] !== "RPAREN") throw new Error("Missing )");
+      this.consume();
+      if (name in BUILTIN_FUNCS_1) {
+        if (args.length !== 1) throw new Error(name + " takes 1 argument");
+        return BUILTIN_FUNCS_1[name](args[0]);
+      }
+      if (name in BUILTIN_FUNCS_N) return BUILTIN_FUNCS_N[name](args);
+      throw new Error("Unknown function: " + name);
+    }
     if (t[0] === "LPAREN") {
       this.consume();
       const val = this.parseExpr();
@@ -193,8 +237,11 @@ class Parser {
 function evaluateLine(text, variables) {
   const tokens = tokenize(text);
   if (tokens.some(t => t[0] === "TOTAL")) return ["TOTAL", variables];
+  const allVars = Object.create(null);
+  for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
+  for (const k in variables) allVars[k] = variables[k];
   const hasValue = tokens.some(t =>
-    t[0] === "NUM" || t[0] === "PCT" || (t[0] === "WORD" && t[1].toLowerCase() in variables)
+    t[0] === "NUM" || t[0] === "PCT" || t[0] === "FUNC" || (t[0] === "WORD" && t[1].toLowerCase() in allVars)
   );
   if (!hasValue) return [null, variables];
   let pos = 0;
@@ -208,7 +255,7 @@ function evaluateLine(text, variables) {
     const t = tokens[j];
     if (t[0] === "WORD") {
       const wl = t[1].toLowerCase();
-      if (wl in variables) mathTokens.push(["NUM", variables[wl]]);
+      if (wl in allVars) mathTokens.push(["NUM", allVars[wl]]);
     } else if (t[0] === "EQ") {
       // skip
     } else {
