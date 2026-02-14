@@ -1,0 +1,14 @@
+1000000                                 # => 1_000_000
+@separator = off
+1000000                                 # => 1000000
+@separator = comma
+1000000                                 # => 1,000,000
+@separator = space
+1000000                                 # => 1 000 000
+@separator = underscore
+1000000                                 # => 1_000_000
+@format = fixed(2)
+@separator = off
+1000000                                 # => 1000000.00
+@separator = comma
+1000000                                 # => 1,000,000.00

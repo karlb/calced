@@ -8,7 +8,7 @@ import sys
 import time
 
 RESULT_RE = re.compile(r"\s{2,}# => .*$")
-DIRECTIVE_RE = re.compile(r"^@(format|commas)\s*=\s*(.+)$", re.IGNORECASE)
+DIRECTIVE_RE = re.compile(r"^@(format|separator)\s*=\s*(.+)$", re.IGNORECASE)
 FORMAT_RE = re.compile(r"^(minSig|fixed|scientific|auto)(?:\((\d+)\))?$", re.IGNORECASE)
 
 # SI prefixes (case-sensitive: M=mega, m=milli)
@@ -259,10 +259,19 @@ def evaluate_line(text, variables):
 def format_result(n, fmt_opts=None):
     """Format a number according to fmt_opts."""
     if fmt_opts is None:
-        fmt_opts = {"mode": "minSig", "precision": 3, "commas": True}
+        fmt_opts = {"mode": "minSig", "precision": 3, "separator": "underscore"}
     mode = fmt_opts["mode"]
     prec = fmt_opts["precision"]
-    commas = fmt_opts["commas"]
+    sep = fmt_opts["separator"]
+
+    def apply_sep(s):
+        if sep == "comma":
+            return s
+        if sep == "underscore":
+            return s.replace(",", "_")
+        if sep == "space":
+            return s.replace(",", " ")
+        return s.replace(",", "")  # "off"
 
     if mode == "minSig":
         if n == 0:
@@ -272,16 +281,14 @@ def format_result(n, fmt_opts=None):
             show_dec = max(-floor(log10(abs(n)) + 1) + prec, 0)
             rounded = round(n, show_dec)
             if show_dec == 0:
-                s = f"{int(rounded):,}" if commas else str(int(rounded))
+                s = f"{int(rounded):,}"
             else:
-                s = f"{rounded:,.{show_dec}f}" if commas else f"{rounded:.{show_dec}f}"
+                s = f"{rounded:,.{show_dec}f}"
                 s = s.rstrip("0").rstrip(".")
-        return s
+        return apply_sep(s)
 
     if mode == "fixed":
-        if commas:
-            return f"{n:,.{prec}f}"
-        return f"{n:.{prec}f}"
+        return apply_sep(f"{n:,.{prec}f}")
 
     if mode == "scientific":
         # prec = sig figs; Python's e format takes decimal places = sig figs - 1
@@ -305,7 +312,7 @@ def process_file(filepath):
 
     variables = {}
     results_acc = []  # for total/sum accumulation
-    fmt_opts = {"mode": "minSig", "precision": 3, "commas": True}
+    fmt_opts = {"mode": "minSig", "precision": 3, "separator": "underscore"}
     evaluated = []  # list of (clean_line, result_or_none, fmt_opts_snapshot)
 
     for line in lines:
@@ -330,8 +337,10 @@ def process_file(filepath):
                     else:
                         # defaults: scientific/auto default to 3
                         fmt_opts["precision"] = 3
-            elif key == "commas":
-                fmt_opts["commas"] = val.lower() in ("on", "true", "yes")
+            elif key == "separator":
+                v = val.lower()
+                if v in ("off", "underscore", "comma", "space"):
+                    fmt_opts["separator"] = v
             evaluated.append((clean, None, None))
             continue
 
