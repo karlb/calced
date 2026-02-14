@@ -127,7 +127,7 @@ def tokenize(text):
 ACTIVE_TYPES = {"NUM", "PCT", "ADDOP", "MULOP", "POW", "LPAREN", "RPAREN", "EQ", "OF", "TOTAL"}
 DIM = "\033[2m"
 BOLD = "\033[1m"
-BOLD_GREEN = "\033[1;32m"
+GREEN = "\033[32m"
 RESET = "\033[0m"
 
 
@@ -171,7 +171,7 @@ def colorize_line(line, result, fmt_result_str, align, variables):
         # Reconstruct with leading whitespace preserved
         leading = line[: len(line) - len(line.lstrip())]
         pad = max(align - len(line.rstrip()), 2)
-        return leading + colored_expr + " " * pad + DIM + "# => " + RESET + BOLD_GREEN + fmt_result_str + RESET
+        return leading + colored_expr + " " * pad + DIM + "# => " + RESET + GREEN + fmt_result_str + RESET
     if stripped.startswith("#"):
         return BOLD + line + RESET
     if DIRECTIVE_RE.match(stripped):
