@@ -51,6 +51,8 @@ def tokenize(text):
             i += 1
             continue
 
+        start = i
+
         # Numbers: 1,000 or 1_000 or 1.5 or .5 or 1.5e3 with optional SI suffix
         m = re.match(r"(\d[\d,_]*\.?\d*|\.\d+)(?:([eE][+-]?\d+)|(" + SI_SUFFIX_RE + r"))?", text[i:])
         if m and m.group(1):
@@ -65,39 +67,39 @@ def tokenize(text):
                 val *= SI_PREFIX[suffix]
             end = i + m.end()
             if end < n and text[end] == "%":
-                tokens.append(("PCT", val))
+                tokens.append(("PCT", val, start, end + 1))
                 i = end + 1
             else:
-                tokens.append(("NUM", val))
+                tokens.append(("NUM", val, start, end))
                 i = end
             continue
 
         if text[i] in "+-":
-            tokens.append(("ADDOP", text[i]))
+            tokens.append(("ADDOP", text[i], start, i + 1))
             i += 1
             continue
         if text[i] in "*/":
-            tokens.append(("MULOP", text[i]))
+            tokens.append(("MULOP", text[i], start, i + 1))
             i += 1
             continue
         if text[i] == "^":
-            tokens.append(("POW", "^"))
+            tokens.append(("POW", "^", start, i + 1))
             i += 1
             continue
         if text[i] == "%":
-            tokens.append(("MULOP", "%"))  # modulo when standalone
+            tokens.append(("MULOP", "%", start, i + 1))  # modulo when standalone
             i += 1
             continue
         if text[i] == "(":
-            tokens.append(("LPAREN", "("))
+            tokens.append(("LPAREN", "(", start, i + 1))
             i += 1
             continue
         if text[i] == ")":
-            tokens.append(("RPAREN", ")"))
+            tokens.append(("RPAREN", ")", start, i + 1))
             i += 1
             continue
         if text[i] == "=":
-            tokens.append(("EQ", "="))
+            tokens.append(("EQ", "=", start, i + 1))
             i += 1
             continue
 
@@ -106,19 +108,75 @@ def tokenize(text):
         if m:
             word = m.group()
             wl = word.lower()
+            end = i + m.end()
             if wl == "of":
-                tokens.append(("OF", "of"))
+                tokens.append(("OF", "of", start, end))
             elif wl in ("total", "sum"):
-                tokens.append(("TOTAL", wl))
+                tokens.append(("TOTAL", wl, start, end))
             else:
-                tokens.append(("WORD", word))
-            i += m.end()
+                tokens.append(("WORD", word, start, end))
+            i = end
             continue
 
         i += 1  # skip unknown chars
 
-    tokens.append(("EOF", None))
+    tokens.append(("EOF", None, n, n))
     return tokens
+
+
+ACTIVE_TYPES = {"NUM", "PCT", "ADDOP", "MULOP", "POW", "LPAREN", "RPAREN", "EQ", "OF", "TOTAL"}
+DIM = "\033[2m"
+BOLD = "\033[1m"
+BOLD_GREEN = "\033[1;32m"
+RESET = "\033[0m"
+
+
+def colorize_expr(text, variables):
+    """Return text with dim escapes around ignored (non-math) words."""
+    tokens = tokenize(text)
+    parts = []
+    pos = 0
+    for idx, t in enumerate(tokens):
+        if t[0] == "EOF":
+            break
+        start, end = t[2], t[3]
+        # Emit any gap (whitespace/unknown) as-is
+        if start > pos:
+            parts.append(text[pos:start])
+        # Determine if token is active or ignored
+        if t[0] in ACTIVE_TYPES:
+            parts.append(text[start:end])
+        elif t[0] == "WORD":
+            # Active if: variable reference, or assignment target (pos 0 followed by EQ)
+            if t[1].lower() in variables:
+                parts.append(text[start:end])
+            elif idx == 0 and len(tokens) > 1 and tokens[1][0] == "EQ":
+                parts.append(text[start:end])
+            else:
+                parts.append(DIM + text[start:end] + RESET)
+        else:
+            parts.append(text[start:end])
+        pos = end
+    # Trailing content
+    if pos < len(text):
+        parts.append(text[pos:])
+    return "".join(parts)
+
+
+def colorize_line(line, result, fmt_result_str, align, variables):
+    """Return a colorized version of an output line."""
+    stripped = line.strip()
+    if result is not None:
+        colored_expr = colorize_expr(stripped, variables)
+        # Reconstruct with leading whitespace preserved
+        leading = line[: len(line) - len(line.lstrip())]
+        pad = max(align - len(line.rstrip()), 2)
+        return leading + colored_expr + " " * pad + DIM + "# => " + RESET + BOLD_GREEN + fmt_result_str + RESET
+    if stripped.startswith("#"):
+        return BOLD + line + RESET
+    if DIRECTIVE_RE.match(stripped):
+        return DIM + line + RESET
+    return line
 
 
 class Parser:
@@ -305,6 +363,8 @@ def process_file(filepath, show=False):
     with open(filepath, "r") as f:
         original = f.read()
 
+    use_color = show and not os.environ.get("NO_COLOR", "")
+
     lines = original.split("\n")
     # Remove trailing empty element from split (file ended with \n)
     if lines and lines[-1] == "":
@@ -313,7 +373,7 @@ def process_file(filepath, show=False):
     variables = {}
     results_acc = []  # for total/sum accumulation
     fmt_opts = {"mode": "minSig", "precision": 3, "separator": "underscore"}
-    evaluated = []  # list of (clean_line, result_or_none, fmt_opts_snapshot)
+    evaluated = []  # list of (clean_line, result_or_none, fmt_opts_snapshot, vars_snapshot)
 
     for line in lines:
         clean = RESULT_RE.sub("", line).rstrip()
@@ -341,36 +401,37 @@ def process_file(filepath, show=False):
                 v = val.lower()
                 if v in ("off", "underscore", "comma", "space"):
                     fmt_opts["separator"] = v
-            evaluated.append((clean, None, None))
+            evaluated.append((clean, None, None, None))
             continue
 
         # Header lines reset the accumulator
         if stripped.startswith("#"):
             results_acc.clear()
-            evaluated.append((clean, None, None))
+            evaluated.append((clean, None, None, None))
             continue
 
         # Empty lines
         if not stripped:
             results_acc.append(None)
-            evaluated.append(("", None, None))
+            evaluated.append(("", None, None, None))
             continue
 
+        vars_before = dict(variables)
         result, variables = evaluate_line(stripped, variables)
 
         if result == "TOTAL":
             total = sum(r for r in results_acc if r is not None)
             results_acc.append(total)
-            evaluated.append((clean, total, dict(fmt_opts)))
+            evaluated.append((clean, total, dict(fmt_opts), vars_before))
         elif result is not None:
             results_acc.append(result)
-            evaluated.append((clean, result, dict(fmt_opts)))
+            evaluated.append((clean, result, dict(fmt_opts), vars_before))
         else:
             results_acc.append(None)
-            evaluated.append((clean, None, None))
+            evaluated.append((clean, None, None, None))
 
     # Compute alignment column from longest line that has a result
-    result_lines = [c for c, r, _ in evaluated if r is not None]
+    result_lines = [c for c, r, _, _ in evaluated if r is not None]
     if result_lines:
         max_len = max(len(l) for l in result_lines)
         align = max(max_len + 2, 40)
@@ -379,15 +440,28 @@ def process_file(filepath, show=False):
 
     # Format output
     output = []
-    for clean, result, opts in evaluated:
+    colored_output = []
+    for clean, result, opts, vsnap in evaluated:
         if result is not None:
-            output.append(f"{clean.ljust(align)}# => {format_result(result, opts)}")
+            fmt_str = format_result(result, opts)
+            output.append(f"{clean.ljust(align)}# => {fmt_str}")
+            if use_color:
+                colored_output.append(
+                    colorize_line(clean, result, fmt_str, align, vsnap)
+                )
         else:
             output.append(clean)
+            if use_color:
+                colored_output.append(
+                    colorize_line(clean, None, None, align, None)
+                )
 
     new_content = "\n".join(output) + "\n"
     if show:
-        sys.stdout.write(new_content)
+        if use_color:
+            sys.stdout.write("\n".join(colored_output) + "\n")
+        else:
+            sys.stdout.write(new_content)
         return new_content != original
     if new_content != original:
         with open(filepath, "w") as f:
