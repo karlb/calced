@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Test runner for the JS notecalc engine against shared tests/*.nc files.
+ * Test runner for the JS calced engine against shared tests/*.md files.
  * Extracts the engine from index.html and validates against expected results.
  */
 import { readFileSync, readdirSync } from "fs";
@@ -14,7 +14,7 @@ const testsDir = join(__dirname, "..", "tests");
 // Extract JS engine from index.html between markers
 const html = readFileSync(htmlPath, "utf-8");
 const startMarker = "// --- SI Prefixes ---";
-const endMarker = "// END NOTECALC ENGINE";
+const endMarker = "// END CALCED ENGINE";
 const startIdx = html.indexOf(startMarker);
 const endIdx = html.indexOf(endMarker);
 if (startIdx === -1 || endIdx === -1) {
@@ -37,7 +37,7 @@ let totalPassed = 0;
 let totalFailed = 0;
 let failedFiles = [];
 
-const files = readdirSync(testsDir).filter(f => f.endsWith(".nc")).sort();
+const files = readdirSync(testsDir).filter(f => f.endsWith(".md")).sort();
 
 for (const file of files) {
   const content = readFileSync(join(testsDir, file), "utf-8");

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>notecalc</title>
+<title>calced</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
@@ -55,7 +55,7 @@ header h1 { font-size: 16px; font-weight: 600; color: var(--dim); }
 </head>
 <body>
 <header>
-  <h1>notecalc</h1>
+  <h1>calced</h1>
   <button id="share-btn" onclick="shareURL()">Share</button>
 </header>
 <div class="editor-wrap">
@@ -64,7 +64,7 @@ header h1 { font-size: 16px; font-weight: 600; color: var(--dim); }
     <div id="results"></div>
   </div>
 </div>
-<!-- BEGIN NOTECALC ENGINE -->
+<!-- BEGIN CALCED ENGINE -->
 <script>
 // --- SI Prefixes ---
 const SI_PREFIX = {
@@ -328,7 +328,7 @@ function processText(text) {
   }
   return output;
 }
-// END NOTECALC ENGINE
+// END CALCED ENGINE
 </script>
 
 <script>
