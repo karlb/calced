@@ -51,12 +51,16 @@ def tokenize(text):
             i += 1
             continue
 
-        # Numbers: 1,000 or 1_000 or 1.5 or .5 with optional SI prefix suffix
-        m = re.match(r"(\d[\d,_]*\.?\d*|\.\d+)(" + SI_SUFFIX_RE + r")?", text[i:])
+        # Numbers: 1,000 or 1_000 or 1.5 or .5 or 1.5e3 with optional SI suffix
+        m = re.match(r"(\d[\d,_]*\.?\d*|\.\d+)(?:([eE][+-]?\d+)|(" + SI_SUFFIX_RE + r"))?", text[i:])
         if m and m.group(1):
             raw = m.group(1).replace(",", "").replace("_", "")
-            val = float(raw)
-            suffix = m.group(2)
+            exp = m.group(2)
+            if exp:
+                val = float(raw + exp)
+            else:
+                val = float(raw)
+            suffix = m.group(3)
             if suffix:
                 val *= SI_PREFIX[suffix]
             end = i + m.end()
