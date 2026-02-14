@@ -23,11 +23,12 @@ header {
   padding: 10px 20px; background: var(--header-bg); border-bottom: 1px solid var(--border);
 }
 header h1 { font-size: 16px; font-weight: 600; color: var(--dim); }
-#share-btn {
+header div { display: flex; gap: 8px; }
+#new-btn, #share-btn {
   background: var(--border); color: var(--text); border: none; padding: 6px 14px;
   border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 13px;
 }
-#share-btn:hover { background: var(--accent); color: var(--header-bg); }
+#new-btn:hover, #share-btn:hover { background: var(--accent); color: var(--header-bg); }
 #share-btn.copied { background: var(--green); color: var(--header-bg); }
 .editor-wrap {
   flex: 1; overflow-y: auto;
@@ -56,7 +57,10 @@ header h1 { font-size: 16px; font-weight: 600; color: var(--dim); }
 <body>
 <header>
   <h1>calced</h1>
-  <button id="share-btn" onclick="shareURL()">Share</button>
+  <div>
+    <button id="new-btn" onclick="window.open(location.pathname,'_blank')">New</button>
+    <button id="share-btn" onclick="shareURL()">Share</button>
+  </div>
 </header>
 <div class="editor-wrap">
   <div class="editor-inner">
