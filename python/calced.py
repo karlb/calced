@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """calced - a notepad calculator that updates files with results."""
 
 import argparse
@@ -13,21 +14,21 @@ FORMAT_RE = re.compile(r"^(minSig|fixed|scientific|auto)(?:\((\d+)\))?$", re.IGN
 
 # SI prefixes (case-sensitive: M=mega, m=milli)
 SI_PREFIX = {
-    "Q": 1e30,   # quetta
-    "R": 1e27,   # ronna
-    "Y": 1e24,   # yotta
-    "Z": 1e21,   # zetta
-    "E": 1e18,   # exa
-    "P": 1e15,   # peta
-    "T": 1e12,   # tera
-    "G": 1e9,    # giga
-    "M": 1e6,    # mega
-    "K": 1e3,    # kilo (unofficial but common)
-    "k": 1e3,    # kilo
-    "m": 1e-3,   # milli
-    "u": 1e-6,   # micro (ASCII)
-    "μ": 1e-6,   # micro
-    "n": 1e-9,   # nano
+    "Q": 1e30,  # quetta
+    "R": 1e27,  # ronna
+    "Y": 1e24,  # yotta
+    "Z": 1e21,  # zetta
+    "E": 1e18,  # exa
+    "P": 1e15,  # peta
+    "T": 1e12,  # tera
+    "G": 1e9,  # giga
+    "M": 1e6,  # mega
+    "K": 1e3,  # kilo (unofficial but common)
+    "k": 1e3,  # kilo
+    "m": 1e-3,  # milli
+    "u": 1e-6,  # micro (ASCII)
+    "μ": 1e-6,  # micro
+    "n": 1e-9,  # nano
     "p": 1e-12,  # pico
     "f": 1e-15,  # femto
     "a": 1e-18,  # atto
@@ -37,14 +38,25 @@ SI_PREFIX = {
 SI_SUFFIX_RE = "[" + re.escape("".join(SI_PREFIX.keys())) + "]"
 
 BUILTIN_FUNCS_1 = {
-    "sqrt": math.sqrt, "abs": abs, "floor": math.floor, "ceil": math.ceil,
-    "log": math.log, "log2": math.log2, "log10": math.log10,
-    "sin": math.sin, "cos": math.cos, "tan": math.tan,
-    "asin": math.asin, "acos": math.acos, "atan": math.atan,
+    "sqrt": math.sqrt,
+    "abs": abs,
+    "floor": math.floor,
+    "ceil": math.ceil,
+    "log": math.log,
+    "log2": math.log2,
+    "log10": math.log10,
+    "sin": math.sin,
+    "cos": math.cos,
+    "tan": math.tan,
+    "asin": math.asin,
+    "acos": math.acos,
+    "atan": math.atan,
     "exp": math.exp,
 }
 BUILTIN_FUNCS_N = {
-    "round": lambda args: round(args[0]) if len(args) == 1 else round(args[0], int(args[1])),
+    "round": lambda args: round(args[0])
+    if len(args) == 1
+    else round(args[0], int(args[1])),
     "min": lambda args: min(args),
     "max": lambda args: max(args),
 }
@@ -56,60 +68,135 @@ BUILTIN_CONSTS = {"pi": math.pi, "e": math.e, "tau": math.tau}
 UNIT_TABLE = {
     "length": {
         "_base": "meter",
-        "mm": 0.001, "millimeter": 0.001, "millimeters": 0.001,
-        "cm": 0.01, "centimeter": 0.01, "centimeters": 0.01,
-        "m": 1, "meter": 1, "meters": 1,
-        "km": 1000, "kilometer": 1000, "kilometers": 1000,
-        "in": 0.0254, "inch": 0.0254, "inches": 0.0254,
-        "ft": 0.3048, "foot": 0.3048, "feet": 0.3048,
-        "yd": 0.9144, "yard": 0.9144, "yards": 0.9144,
-        "mi": 1609.344, "mile": 1609.344, "miles": 1609.344,
+        "mm": 0.001,
+        "millimeter": 0.001,
+        "millimeters": 0.001,
+        "cm": 0.01,
+        "centimeter": 0.01,
+        "centimeters": 0.01,
+        "m": 1,
+        "meter": 1,
+        "meters": 1,
+        "km": 1000,
+        "kilometer": 1000,
+        "kilometers": 1000,
+        "in": 0.0254,
+        "inch": 0.0254,
+        "inches": 0.0254,
+        "ft": 0.3048,
+        "foot": 0.3048,
+        "feet": 0.3048,
+        "yd": 0.9144,
+        "yard": 0.9144,
+        "yards": 0.9144,
+        "mi": 1609.344,
+        "mile": 1609.344,
+        "miles": 1609.344,
     },
     "mass": {
         "_base": "gram",
-        "mg": 0.001, "milligram": 0.001, "milligrams": 0.001,
-        "g": 1, "gram": 1, "grams": 1,
-        "kg": 1000, "kilogram": 1000, "kilograms": 1000,
-        "oz": 28.3495, "ounce": 28.3495, "ounces": 28.3495,
-        "lb": 453.592, "lbs": 453.592, "pound": 453.592, "pounds": 453.592,
+        "mg": 0.001,
+        "milligram": 0.001,
+        "milligrams": 0.001,
+        "g": 1,
+        "gram": 1,
+        "grams": 1,
+        "kg": 1000,
+        "kilogram": 1000,
+        "kilograms": 1000,
+        "oz": 28.3495,
+        "ounce": 28.3495,
+        "ounces": 28.3495,
+        "lb": 453.592,
+        "lbs": 453.592,
+        "pound": 453.592,
+        "pounds": 453.592,
     },
     "temperature": {
         "_base": "special",
-        "c": "c", "celsius": "c",
-        "f": "f", "fahrenheit": "f",
-        "k": "k", "kelvin": "k",
+        "c": "c",
+        "celsius": "c",
+        "f": "f",
+        "fahrenheit": "f",
+        "k": "k",
+        "kelvin": "k",
     },
     "data": {
         "_base": "byte",
-        "b": 1, "byte": 1, "bytes": 1,
-        "kb": 1000, "kilobyte": 1000, "kilobytes": 1000,
-        "mb": 1e6, "megabyte": 1e6, "megabytes": 1e6,
-        "gb": 1e9, "gigabyte": 1e9, "gigabytes": 1e9,
-        "tb": 1e12, "terabyte": 1e12, "terabytes": 1e12,
-        "kib": 1024, "kibibyte": 1024, "kibibytes": 1024,
-        "mib": 1048576, "mebibyte": 1048576, "mebibytes": 1048576,
-        "gib": 1073741824, "gibibyte": 1073741824, "gibibytes": 1073741824,
-        "tib": 1099511627776, "tebibyte": 1099511627776, "tebibytes": 1099511627776,
+        "b": 1,
+        "byte": 1,
+        "bytes": 1,
+        "kb": 1000,
+        "kilobyte": 1000,
+        "kilobytes": 1000,
+        "mb": 1e6,
+        "megabyte": 1e6,
+        "megabytes": 1e6,
+        "gb": 1e9,
+        "gigabyte": 1e9,
+        "gigabytes": 1e9,
+        "tb": 1e12,
+        "terabyte": 1e12,
+        "terabytes": 1e12,
+        "kib": 1024,
+        "kibibyte": 1024,
+        "kibibytes": 1024,
+        "mib": 1048576,
+        "mebibyte": 1048576,
+        "mebibytes": 1048576,
+        "gib": 1073741824,
+        "gibibyte": 1073741824,
+        "gibibytes": 1073741824,
+        "tib": 1099511627776,
+        "tebibyte": 1099511627776,
+        "tebibytes": 1099511627776,
     },
     "time": {
         "_base": "second",
-        "ms": 0.001, "millisecond": 0.001, "milliseconds": 0.001,
-        "s": 1, "sec": 1, "second": 1, "seconds": 1,
-        "min": 60, "minute": 60, "minutes": 60,
-        "hr": 3600, "hour": 3600, "hours": 3600,
-        "day": 86400, "days": 86400,
-        "week": 604800, "weeks": 604800,
+        "ms": 0.001,
+        "millisecond": 0.001,
+        "milliseconds": 0.001,
+        "s": 1,
+        "sec": 1,
+        "second": 1,
+        "seconds": 1,
+        "min": 60,
+        "minute": 60,
+        "minutes": 60,
+        "hr": 3600,
+        "hour": 3600,
+        "hours": 3600,
+        "day": 86400,
+        "days": 86400,
+        "week": 604800,
+        "weeks": 604800,
     },
     "volume": {
         "_base": "ml",
-        "ml": 1, "milliliter": 1, "milliliters": 1,
-        "l": 1000, "liter": 1000, "liters": 1000,
-        "tsp": 4.929, "teaspoon": 4.929, "teaspoons": 4.929,
-        "tbsp": 14.787, "tablespoon": 14.787, "tablespoons": 14.787,
-        "floz": 29.574, "cup": 236.588, "cups": 236.588,
-        "pt": 473.176, "pint": 473.176, "pints": 473.176,
-        "qt": 946.353, "quart": 946.353, "quarts": 946.353,
-        "gal": 3785.41, "gallon": 3785.41, "gallons": 3785.41,
+        "ml": 1,
+        "milliliter": 1,
+        "milliliters": 1,
+        "l": 1000,
+        "liter": 1000,
+        "liters": 1000,
+        "tsp": 4.929,
+        "teaspoon": 4.929,
+        "teaspoons": 4.929,
+        "tbsp": 14.787,
+        "tablespoon": 14.787,
+        "tablespoons": 14.787,
+        "floz": 29.574,
+        "cup": 236.588,
+        "cups": 236.588,
+        "pt": 473.176,
+        "pint": 473.176,
+        "pints": 473.176,
+        "qt": 946.353,
+        "quart": 946.353,
+        "quarts": 946.353,
+        "gal": 3785.41,
+        "gallon": 3785.41,
+        "gallons": 3785.41,
     },
 }
 
@@ -167,7 +254,12 @@ def tokenize(text):
                 continue
 
         # Numbers: 1,000 or 1_000 or 1.5 or .5 or 1.5e3 with optional SI suffix
-        m = re.match(r"(\d(?:\d|_|,(?=\d))*\.?\d*|\.\d+)(?:([eE][+-]?\d+)|(" + SI_SUFFIX_RE + r"))?", text[i:])
+        m = re.match(
+            r"(\d(?:\d|_|,(?=\d))*\.?\d*|\.\d+)(?:([eE][+-]?\d+)|("
+            + SI_SUFFIX_RE
+            + r"))?",
+            text[i:],
+        )
         if m and m.group(1):
             raw = m.group(1).replace(",", "").replace("_", "")
             exp = m.group(2)
@@ -272,7 +364,8 @@ def classify_line(text, variables):
     has_math = any(
         t[0] in ("NUM", "PCT", "FUNC", "TOTAL")
         or (t[0] == "WORD" and t[1].lower() in all_names)
-        for t in tokens if t[0] != "EOF"
+        for t in tokens
+        if t[0] != "EOF"
     )
 
     # Determine which token indices are "active" (part of math)
@@ -287,8 +380,7 @@ def classify_line(text, variables):
         else:
             # Assignment: WORD = ...
             math_start = 0
-            if (len(tokens) >= 3 and tokens[0][0] == "WORD"
-                    and tokens[1][0] == "EQ"):
+            if len(tokens) >= 3 and tokens[0][0] == "WORD" and tokens[1][0] == "EQ":
                 active.add(0)
                 active.add(1)
                 math_start = 2
@@ -300,16 +392,20 @@ def classify_line(text, variables):
                 t_to = tokens[eof_idx - 1]
                 t_kw = tokens[eof_idx - 2]
                 t_fr = tokens[eof_idx - 3]
-                if (t_to[0] in ("WORD", "FUNC") and t_kw[0] == "WORD"
-                        and t_kw[1].lower() in ("in", "to")
-                        and t_fr[0] in ("WORD", "FUNC")):
+                if (
+                    t_to[0] in ("WORD", "FUNC")
+                    and t_kw[0] == "WORD"
+                    and t_kw[1].lower() in ("in", "to")
+                    and t_fr[0] in ("WORD", "FUNC")
+                ):
                     fr_name = t_fr[1].lower()
                     to_name = t_to[1].lower()
-                    if (fr_name in UNIT_LOOKUP and to_name in UNIT_LOOKUP
-                            and UNIT_LOOKUP[fr_name][0]
-                            == UNIT_LOOKUP[to_name][0]):
-                        active.update(
-                            {eof_idx - 3, eof_idx - 2, eof_idx - 1})
+                    if (
+                        fr_name in UNIT_LOOKUP
+                        and to_name in UNIT_LOOKUP
+                        and UNIT_LOOKUP[fr_name][0] == UNIT_LOOKUP[to_name][0]
+                    ):
+                        active.update({eof_idx - 3, eof_idx - 2, eof_idx - 1})
                         conv_start = eof_idx - 3
 
             # Build math tokens (mirrors evaluateLine), track original indices
@@ -350,7 +446,7 @@ def classify_line(text, variables):
                     # Check for trailing balanced paren annotations
                     depth = 0
                     ok = True
-                    for t in math_tokens[parser.pos:]:
+                    for t in math_tokens[parser.pos :]:
                         if t[0] == "EOF":
                             break
                         if depth == 0 and t[0] != "LPAREN":
@@ -369,8 +465,7 @@ def classify_line(text, variables):
                         for i, orig_idx in enumerate(math_to_orig):
                             if math_tokens[i][0] in ("NUM", "PCT"):
                                 active.add(orig_idx)
-            except (ParseError, ZeroDivisionError, ValueError,
-                    OverflowError):
+            except (ParseError, ZeroDivisionError, ValueError, OverflowError):
                 # Parse failed: only value tokens active
                 for i, orig_idx in enumerate(math_to_orig):
                     if math_tokens[i][0] in ("NUM", "PCT"):
@@ -415,7 +510,17 @@ def colorize_line(line, result, fmt_result_str, align, variables):
         # Reconstruct with leading whitespace preserved
         leading = line[: len(line) - len(line.lstrip())]
         pad = max(align - len(line.rstrip()), 2)
-        return leading + colored_expr + " " * pad + DIM + "# => " + RESET + GREEN + fmt_result_str + RESET
+        return (
+            leading
+            + colored_expr
+            + " " * pad
+            + DIM
+            + "# => "
+            + RESET
+            + GREEN
+            + fmt_result_str
+            + RESET
+        )
     if stripped.startswith("#"):
         return BOLD + line + RESET
     if DIRECTIVE_RE.match(stripped):
@@ -540,8 +645,7 @@ def evaluate_line(text, variables):
 
     # Must have at least one number, variable reference, or function call
     has_value = any(
-        t[0] in ("NUM", "PCT", "FUNC")
-        or (t[0] == "WORD" and t[1].lower() in all_vars)
+        t[0] in ("NUM", "PCT", "FUNC") or (t[0] == "WORD" and t[1].lower() in all_vars)
         for t in tokens
     )
     if not has_value:
@@ -561,9 +665,12 @@ def evaluate_line(text, variables):
         t_to = tokens[conv_end - 1]
         t_kw = tokens[conv_end - 2]
         t_fr = tokens[conv_end - 3]
-        if (t_to[0] in ("WORD", "FUNC") and t_kw[0] == "WORD"
-                and t_kw[1].lower() in ("in", "to")
-                and t_fr[0] in ("WORD", "FUNC")):
+        if (
+            t_to[0] in ("WORD", "FUNC")
+            and t_kw[0] == "WORD"
+            and t_kw[1].lower() in ("in", "to")
+            and t_fr[0] in ("WORD", "FUNC")
+        ):
             to_name = t_to[1].lower()
             fr_name = t_fr[1].lower()
             if fr_name in UNIT_LOOKUP and to_name in UNIT_LOOKUP:
@@ -572,7 +679,7 @@ def evaluate_line(text, variables):
                 if fr_dim == to_dim:
                     conversion = (fr_dim, fr_factor, to_factor)
                     # Remove the 3 conversion tokens (keep EOF)
-                    tokens = tokens[:conv_end - 3] + [tokens[conv_end]]
+                    tokens = tokens[: conv_end - 3] + [tokens[conv_end]]
 
     # Build math token list (resolve variables, skip plain words)
     math_tokens = []
@@ -602,7 +709,7 @@ def evaluate_line(text, variables):
             # e.g. "2*3 (see http://example.com)" → 6
             depth = 0
             ok = True
-            for t in math_tokens[parser.pos:]:
+            for t in math_tokens[parser.pos :]:
                 if t[0] == "EOF":
                     break
                 if depth == 0 and t[0] != "LPAREN":
@@ -649,6 +756,7 @@ def format_result(n, fmt_opts=None):
             s = "0"
         else:
             from math import log10, floor
+
             show_dec = max(-floor(log10(abs(n)) + 1) + prec, 0)
             rounded = round(n, show_dec)
             if show_dec == 0:
@@ -702,8 +810,12 @@ def process_file(filepath, show=False):
                 if fm:
                     mode = fm.group(1).lower()
                     # Normalize mode name
-                    mode_map = {"minsig": "minSig", "fixed": "fixed",
-                                "scientific": "scientific", "auto": "auto"}
+                    mode_map = {
+                        "minsig": "minSig",
+                        "fixed": "fixed",
+                        "scientific": "scientific",
+                        "auto": "auto",
+                    }
                     fmt_opts["mode"] = mode_map.get(mode, mode)
                     if fm.group(2) is not None:
                         fmt_opts["precision"] = int(fm.group(2))
@@ -765,9 +877,7 @@ def process_file(filepath, show=False):
         else:
             output.append(clean)
             if use_color:
-                colored_output.append(
-                    colorize_line(clean, None, None, align, None)
-                )
+                colored_output.append(colorize_line(clean, None, None, align, None))
 
     new_content = "\n".join(output) + "\n"
     if show:
@@ -816,7 +926,10 @@ def main():
         "-w", "--watch", action="store_true", help="watch for changes and auto-update"
     )
     parser.add_argument(
-        "-s", "--show", action="store_true", help="print result to stdout instead of updating the file"
+        "-s",
+        "--show",
+        action="store_true",
+        help="print result to stdout instead of updating the file",
     )
     args = parser.parse_args()
 
@@ -831,3 +944,7 @@ def main():
 
     if args.watch:
         watch_file(args.file, show=args.show)
+
+
+if __name__ == "__main__":
+    main()
