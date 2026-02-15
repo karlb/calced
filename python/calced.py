@@ -703,9 +703,7 @@ def format_result(n, fmt_opts=None):
         if n == 0:
             s = "0"
         else:
-            from math import log10, floor
-
-            show_dec = max(-floor(log10(abs(n)) + 1) + prec, 0)
+            show_dec = max(-math.floor(math.log10(abs(n)) + 1) + prec, 0)
             rounded = round(n, show_dec)
             if show_dec == 0:
                 s = f"{int(rounded):,}"
