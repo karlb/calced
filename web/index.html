@@ -391,7 +391,18 @@ function evaluateLine(text, variables) {
   try {
     const parser = new Parser(mathTokens);
     let result = parser.parseExpr();
-    if (parser.peek()[0] !== "EOF") return [null, variables];
+    if (parser.peek()[0] !== "EOF") {
+      // Allow trailing balanced parenthetical annotations
+      let depth = 0, ok = true;
+      for (let k = parser.pos; k < mathTokens.length; k++) {
+        const tt = mathTokens[k][0];
+        if (tt === "EOF") break;
+        if (depth === 0 && tt !== "LPAREN") { ok = false; break; }
+        if (tt === "LPAREN") depth++;
+        else if (tt === "RPAREN") depth--;
+      }
+      if (!(ok && depth === 0)) return [null, variables];
+    }
     if (conversion !== null) {
       const [dim, fromFactor, toFactor] = conversion;
       if (dim === "temperature") {
@@ -557,10 +568,29 @@ function classifyLine(text, variables) {
       if (fullSuccess) {
         for (const origIdx of mathToOrig) active.add(origIdx);
       } else {
-        // Only value tokens (NUM, PCT) are active
-        for (let i = 0; i < mathToOrig.length; i++) {
-          if (mathTokens[i][0] === "NUM" || mathTokens[i][0] === "PCT") {
-            active.add(mathToOrig[i]);
+        // Check for trailing balanced paren annotations
+        let depth = 0, ok = true, trailPos = -1;
+        try {
+          const p2 = new Parser(mathTokens);
+          p2.parseExpr();
+          trailPos = p2.pos;
+          for (let k = trailPos; k < mathTokens.length; k++) {
+            const tt = mathTokens[k][0];
+            if (tt === "EOF") break;
+            if (depth === 0 && tt !== "LPAREN") { ok = false; break; }
+            if (tt === "LPAREN") depth++;
+            else if (tt === "RPAREN") depth--;
+          }
+        } catch (e) { ok = false; }
+        if (ok && depth === 0 && trailPos > 0) {
+          // Consumed tokens active, trailing parens dimmed
+          for (let i = 0; i < trailPos; i++) active.add(mathToOrig[i]);
+        } else {
+          // Only value tokens (NUM, PCT) are active
+          for (let i = 0; i < mathToOrig.length; i++) {
+            if (mathTokens[i][0] === "NUM" || mathTokens[i][0] === "PCT") {
+              active.add(mathToOrig[i]);
+            }
           }
         }
       }

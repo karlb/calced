@@ -110,5 +110,11 @@
     "text": "max(2, 3),",
     "variables": {},
     "expected": [[0,3,false],[3,4,false],[4,5,false],[5,6,false],[6,7,true],[7,8,false],[8,9,false],[9,10,true]]
+  },
+  {
+    "note": "trailing parenthetical annotation ignored, math still active",
+    "text": "2*3 (note)",
+    "variables": {},
+    "expected": [[0,1,false],[1,2,false],[2,3,false],[3,4,true],[4,5,true],[5,9,true],[9,10,true]]
   }
 ]

@@ -5,6 +5,9 @@
   {"text": "2 foo,", "variables": {}, "expected": 2.0},
   {"text": "max(2, 3)", "variables": {}, "expected": 3.0},
   {"text": "max(2, 3),", "variables": {}, "expected": 3.0},
+  {"text": "2*3 (see http://example.com)", "variables": {}, "expected": 6.0},
+  {"text": "foo = 2*3 (see http://example.com)", "variables": {}, "expected": 6.0},
+  {"text": "rent 2000 (monthly)", "variables": {}, "expected": 2000.0},
   {"text": "# comment", "variables": {}, "expected": null},
   {"text": "hello world", "variables": {}, "expected": null}
 ]

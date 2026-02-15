@@ -347,10 +347,28 @@ def classify_line(text, variables):
                     for orig_idx in math_to_orig:
                         active.add(orig_idx)
                 else:
-                    # Leftovers: only value tokens active
-                    for i, orig_idx in enumerate(math_to_orig):
-                        if math_tokens[i][0] in ("NUM", "PCT"):
-                            active.add(orig_idx)
+                    # Check for trailing balanced paren annotations
+                    depth = 0
+                    ok = True
+                    for t in math_tokens[parser.pos:]:
+                        if t[0] == "EOF":
+                            break
+                        if depth == 0 and t[0] != "LPAREN":
+                            ok = False
+                            break
+                        if t[0] == "LPAREN":
+                            depth += 1
+                        elif t[0] == "RPAREN":
+                            depth -= 1
+                    if ok and depth == 0:
+                        # Consumed tokens active, trailing parens dimmed
+                        for i in range(parser.pos):
+                            active.add(math_to_orig[i])
+                    else:
+                        # Leftovers: only value tokens active
+                        for i, orig_idx in enumerate(math_to_orig):
+                            if math_tokens[i][0] in ("NUM", "PCT"):
+                                active.add(orig_idx)
             except (ParseError, ZeroDivisionError, ValueError,
                     OverflowError):
                 # Parse failed: only value tokens active
@@ -580,7 +598,22 @@ def evaluate_line(text, variables):
         parser = Parser(math_tokens)
         result = parser.parse_expr()
         if parser.peek()[0] != "EOF":
-            return None, variables  # leftover tokens = ambiguous
+            # Allow trailing balanced parenthetical annotations
+            # e.g. "2*3 (see http://example.com)" → 6
+            depth = 0
+            ok = True
+            for t in math_tokens[parser.pos:]:
+                if t[0] == "EOF":
+                    break
+                if depth == 0 and t[0] != "LPAREN":
+                    ok = False
+                    break
+                if t[0] == "LPAREN":
+                    depth += 1
+                elif t[0] == "RPAREN":
+                    depth -= 1
+            if not (ok and depth == 0):
+                return None, variables
         if conversion is not None:
             dim, from_factor, to_factor = conversion
             if dim == "temperature":
