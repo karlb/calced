@@ -1,3 +1,7 @@
+.PHONY: README.md
+README.md:
+	uvx --from cogapp cog -r README.md
+
 test: test-py test-js
 
 test-py:

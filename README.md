@@ -1,0 +1,267 @@
+# calced
+
+A notepad calculator that evaluates math expressions in plain text files. Available as a **CLI tool** and a **web app** — both use the same syntax and are validated against the same test suite.
+
+## Web
+
+Open the web app in a browser — no install required.
+
+## CLI
+
+```
+calced <file>           # evaluate and update file in place
+calced -s <file>        # print result to stdout (don't modify file)
+calced -w <file>        # watch for changes and auto-update
+calced -w -s <file>     # watch and print (clears screen on change)
+```
+
+### Installation
+
+Requires Python 3.9+.
+
+```sh
+# With uv (recommended)
+uv tool install ./python
+
+# Or just run the script directly
+python python/calced.py <file>
+```
+
+## How it works
+
+Write math anywhere in a plain text file. Results are appended inline as `# => result` comments. Non-math lines are left untouched.
+
+[[[cog
+import subprocess, tempfile, os
+
+def run_calced(text):
+    text = text.lstrip('\n')
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+        f.write(text)
+        fname = f.name
+    env = {**os.environ, 'NO_COLOR': '1'}
+    result = subprocess.run(
+        ['python', 'python/calced.py', '-s', fname],
+        capture_output=True, text=True, env=env
+    )
+    os.unlink(fname)
+    cog.out('```\n' + result.stdout + '```\n')
+
+run_calced("""
+rent 1500
+groceries 200 + 150
+utilities 80 + 45 + 30
+total
+""")
+]]]
+```
+rent 1500                               # => 1_500
+groceries 200 + 150                     # => 350
+utilities 80 + 45 + 30                  # => 155
+total                                   # => 2_005
+```
+[[[end]]]
+
+Results are aligned and updated in place each time you run the CLI (or automatically in watch mode), or live as you type in the web app.
+
+## Features
+
+### Basic arithmetic
+
+[[[cog
+run_calced("""
+2 + 3
+10 * (4 + 6)
+2 ^ 10
+17 % 5
+""")
+]]]
+```
+2 + 3                                   # => 5
+10 * (4 + 6)                            # => 100
+2 ^ 10                                  # => 1_024
+17 % 5                                  # => 2
+```
+[[[end]]]
+
+### Variables
+
+[[[cog
+run_calced("""
+income = 5000
+tax_rate = 22%
+tax = income * tax_rate
+after_tax = income - tax
+""")
+]]]
+```
+income = 5000                           # => 5_000
+tax_rate = 22%                          # => 0.22
+tax = income * tax_rate                 # => 1_100
+after_tax = income - tax                # => 3_900
+```
+[[[end]]]
+
+### Percentages
+
+[[[cog
+run_calced("""
+50% of 300
+200 + 15%
+200 - 10%
+""")
+]]]
+```
+50% of 300                              # => 150
+200 + 15%                               # => 230
+200 - 10%                               # => 180
+```
+[[[end]]]
+
+### SI prefixes
+
+[[[cog
+run_calced("""
+1k
+1M
+1.5G
+500n * 2
+""")
+]]]
+```
+1k                                      # => 1_000
+1M                                      # => 1_000_000
+1.5G                                    # => 1_500_000_000
+500n * 2                                # => 0.000001
+```
+[[[end]]]
+
+Supported: `k`/`K` (kilo), `M` (mega), `G` (giga), `T` (tera), `P` (peta), `E` (exa), `m` (milli), `u`/`μ` (micro), `n` (nano), `p` (pico), `f` (femto), and more.
+
+### Unit conversions
+
+[[[cog
+run_calced("""
+5 km in miles
+100 C in F
+1 gib in mib
+60 min in hr
+1 gal in l
+""")
+]]]
+```
+5 km in miles                           # => 3.11
+100 C in F                              # => 212
+1 gib in mib                            # => 1_024
+60 min in hr                            # => 1
+1 gal in l                              # => 3.79
+```
+[[[end]]]
+
+Supported dimensions: length, mass, temperature, data, time, volume. Use `in` or `to`.
+
+### Functions
+
+[[[cog
+run_calced("""
+sqrt(16)
+round(3.14159, 2)
+min(5, 2, 8)
+max(1, 9, 3)
+log10(1000)
+sin(0)
+""")
+]]]
+```
+sqrt(16)                                # => 4
+round(3.14159, 2)                       # => 3.14
+min(5, 2, 8)                            # => 2
+max(1, 9, 3)                            # => 9
+log10(1000)                             # => 3
+sin(0)                                  # => 0
+```
+[[[end]]]
+
+Available: `sqrt`, `abs`, `floor`, `ceil`, `round`, `log`, `log2`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `exp`, `min`, `max`
+
+### Constants
+
+[[[cog
+run_calced("""
+pi * 2
+e ^ 1
+""")
+]]]
+```
+pi * 2                                  # => 6.28
+e ^ 1                                   # => 2.72
+```
+[[[end]]]
+
+### Totals
+
+The `total` (or `sum`) keyword sums all numeric results since the last `#` heading or start of file.
+
+[[[cog
+run_calced("""
+rent 1500
+groceries 350
+utilities 155
+total
+""")
+]]]
+```
+rent 1500                               # => 1_500
+groceries 350                           # => 350
+utilities 155                           # => 155
+total                                   # => 2_005
+```
+[[[end]]]
+
+Blank lines are ignored in the total; headings reset it.
+
+### Number formats
+
+Numbers can be written with commas or underscores as separators (`1,000` or `1_000`), in hex/binary/octal (`0xFF`, `0b1010`, `0o77`), or in scientific notation (`1.5e3`).
+
+### Trailing annotations
+
+Parenthetical notes after an expression are ignored:
+
+[[[cog
+run_calced("""
+celo_price = 0.08 (see http://coinmarketcap.com)
+""")
+]]]
+```
+celo_price = 0.08 (see http://coinmarketcap.com)  # => 0.08
+```
+[[[end]]]
+
+## Format directives
+
+Control output formatting with `@format` and `@separator` directives. These apply to all subsequent lines until changed.
+
+[[[cog
+run_calced("""
+1000000
+@format = fixed(2)
+1000000
+@format = scientific
+1000000
+@separator = comma
+@format = minSig(3)
+1000000
+""")
+]]]
+```
+1000000                                 # => 1_000_000
+@format = fixed(2)
+1000000                                 # => 1_000_000.00
+@format = scientific
+1000000                                 # => 1.00e+06
+@separator = comma
+@format = minSig(3)
+1000000                                 # => 1,000,000
+```
+[[[end]]]
