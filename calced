@@ -317,6 +317,7 @@ def classify_line(text, variables):
             all_vars = {**BUILTIN_CONSTS, **(variables or {})}
             math_tokens = []
             math_to_orig = []
+            paren_depth = 0
             for idx in range(math_start, len(tokens)):
                 t = tokens[idx]
                 if conv_start <= idx < eof_idx:
@@ -328,7 +329,13 @@ def classify_line(text, variables):
                         math_to_orig.append(idx)
                 elif t[0] == "EQ":
                     pass
+                elif t[0] == "COMMA" and paren_depth == 0:
+                    pass
                 else:
+                    if t[0] == "LPAREN":
+                        paren_depth += 1
+                    elif t[0] == "RPAREN":
+                        paren_depth -= 1
                     math_tokens.append(t)
                     math_to_orig.append(idx)
 
@@ -552,6 +559,7 @@ def evaluate_line(text, variables):
 
     # Build math token list (resolve variables, skip plain words)
     math_tokens = []
+    paren_depth = 0
     for t in tokens[pos:]:
         if t[0] == "WORD":
             wl = t[1].lower()
@@ -560,7 +568,13 @@ def evaluate_line(text, variables):
             # else skip
         elif t[0] == "EQ":
             pass  # skip stray equals
+        elif t[0] == "COMMA" and paren_depth == 0:
+            pass  # skip top-level commas
         else:
+            if t[0] == "LPAREN":
+                paren_depth += 1
+            elif t[0] == "RPAREN":
+                paren_depth -= 1
             math_tokens.append(t)
 
     try:

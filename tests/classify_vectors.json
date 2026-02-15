@@ -98,5 +98,17 @@
     "text": "thing, 50",
     "variables": {},
     "expected": [[0,5,true],[5,6,true],[6,7,true],[7,9,false]]
+  },
+  {
+    "note": "trailing comma ignored, number still active",
+    "text": "2 foo,",
+    "variables": {},
+    "expected": [[0,1,false],[1,2,true],[2,5,true],[5,6,true]]
+  },
+  {
+    "note": "trailing comma dimmed, inner comma in function call still active",
+    "text": "max(2, 3),",
+    "variables": {},
+    "expected": [[0,3,false],[3,4,false],[4,5,false],[5,6,false],[6,7,true],[7,8,false],[8,9,false],[9,10,true]]
   }
 ]

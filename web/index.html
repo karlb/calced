@@ -372,6 +372,7 @@ function evaluateLine(text, variables) {
     }
   }
   const mathTokens = [];
+  let parenDepth = 0;
   for (let j = pos; j < tokens.length; j++) {
     const t = tokens[j];
     if (t[0] === "WORD") {
@@ -379,7 +380,11 @@ function evaluateLine(text, variables) {
       if (wl in allVars) mathTokens.push(["NUM", allVars[wl]]);
     } else if (t[0] === "EQ") {
       // skip
+    } else if (t[0] === "COMMA" && parenDepth === 0) {
+      // skip top-level commas
     } else {
+      if (t[0] === "LPAREN") parenDepth++;
+      else if (t[0] === "RPAREN") parenDepth--;
       mathTokens.push(t);
     }
   }
@@ -518,6 +523,7 @@ function classifyLine(text, variables) {
       if (variables) { for (const k in variables) allVars[k] = variables[k]; }
       const mathTokens = [];
       const mathToOrig = [];
+      let parenDepth = 0;
       for (let idx = mathStart; idx < tokens.length; idx++) {
         const t = tokens[idx];
         if (idx >= convStart && idx < eofIdx) continue;
@@ -529,7 +535,11 @@ function classifyLine(text, variables) {
           }
         } else if (t[0] === "EQ") {
           // skip
+        } else if (t[0] === "COMMA" && parenDepth === 0) {
+          // skip top-level commas
         } else {
+          if (t[0] === "LPAREN") parenDepth++;
+          else if (t[0] === "RPAREN") parenDepth--;
           mathTokens.push(t);
           mathToOrig.push(idx);
         }
