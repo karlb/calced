@@ -251,10 +251,30 @@ GREEN = "\033[32m"
 RESET = "\033[0m"
 
 
-def colorize_expr(text, variables):
-    """Return text with dim escapes around ignored (non-math) words."""
+def classify_line(text, variables):
+    """Classify tokens in a line for syntax highlighting.
+
+    Returns "blank", "comment", "directive", or list of [start, end, dim] tuples.
+    """
+    stripped = text.strip()
+    if not stripped:
+        return "blank"
+    if stripped.startswith("#"):
+        return "comment"
+    if DIRECTIVE_RE.match(stripped):
+        return "directive"
+
     tokens = tokenize(text)
-    # Detect unit conversion suffix to mark those indices as active
+    all_names = set(BUILTIN_CONSTS) | set(variables or {})
+
+    # Check if line has any math content
+    has_math = any(
+        t[0] in ("NUM", "PCT", "FUNC", "TOTAL")
+        or (t[0] == "WORD" and t[1].lower() in all_names)
+        for t in tokens if t[0] != "EOF"
+    )
+
+    # Detect unit conversion suffix
     conv_indices = set()
     eof_idx = len(tokens) - 1
     if eof_idx >= 4:
@@ -269,34 +289,49 @@ def colorize_expr(text, variables):
             if (fr_name in UNIT_LOOKUP and to_name in UNIT_LOOKUP
                     and UNIT_LOOKUP[fr_name][0] == UNIT_LOOKUP[to_name][0]):
                 conv_indices = {eof_idx - 3, eof_idx - 2, eof_idx - 1}
-    parts = []
+
+    spans = []
     pos = 0
     for idx, t in enumerate(tokens):
         if t[0] == "EOF":
             break
         start, end = t[2], t[3]
-        # Emit any gap (whitespace/unknown) as-is
         if start > pos:
-            parts.append(text[pos:start])
-        # Determine if token is active or ignored
+            spans.append([pos, start, False])
         if idx in conv_indices:
-            parts.append(text[start:end])
+            dim = False
         elif t[0] in ACTIVE_TYPES:
-            parts.append(text[start:end])
+            dim = False
         elif t[0] == "WORD":
-            # Active if: variable reference, or assignment target (pos 0 followed by EQ)
-            if t[1].lower() in variables:
-                parts.append(text[start:end])
+            if t[1].lower() in all_names:
+                dim = False
             elif idx == 0 and len(tokens) > 1 and tokens[1][0] == "EQ":
-                parts.append(text[start:end])
+                dim = False
             else:
-                parts.append(DIM + text[start:end] + RESET)
+                dim = True
         else:
-            parts.append(text[start:end])
+            dim = False
+        spans.append([start, end, dim])
         pos = end
-    # Trailing content
     if pos < len(text):
-        parts.append(text[pos:])
+        spans.append([pos, len(text), False])
+    if not has_math:
+        spans = [[s, e, True] for s, e, _ in spans]
+    return spans
+
+
+def colorize_expr(text, variables):
+    """Return text with dim escapes around ignored (non-math) words."""
+    cls = classify_line(text, variables)
+    if isinstance(cls, str):
+        return text
+    parts = []
+    for start, end, dim in cls:
+        chunk = text[start:end]
+        if dim:
+            parts.append(DIM + chunk + RESET)
+        else:
+            parts.append(chunk)
     return "".join(parts)
 
 

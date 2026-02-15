@@ -49,12 +49,22 @@ header div { display: flex; gap: 8px; }
 .editor-inner {
   display: flex; min-height: 100%;
 }
-#input {
-  flex: 1 1 0; min-width: 0; field-sizing: content; align-self: flex-start; min-height: 100%;
-  background: var(--surface); color: var(--text); border: none; resize: none;
-  padding: 12px 16px; font: inherit; line-height: 1.7;
-  outline: none; overflow: hidden; white-space: pre-wrap; tab-size: 4;
+.input-wrap {
+  flex: 1 1 0; min-width: 0; align-self: flex-start; min-height: 100%;
+  display: grid; background: var(--surface);
 }
+.input-wrap > * {
+  grid-area: 1/1; padding: 12px 16px; font: inherit; line-height: 1.7;
+  white-space: pre-wrap; tab-size: 4; overflow-wrap: break-word; word-break: break-all;
+}
+#highlight { pointer-events: none; color: var(--text); }
+#input {
+  field-sizing: content; color: transparent; caret-color: var(--text);
+  background: transparent; border: none; resize: none;
+  outline: none; overflow: hidden;
+}
+.hl-dim { opacity: 0.4; }
+.hl-comment { font-weight: bold; }
 #input::placeholder { color: var(--dim); }
 #results {
   width: 200px; min-width: 120px; background: var(--surface);
@@ -77,7 +87,10 @@ header div { display: flex; gap: 8px; }
 </header>
 <div class="editor-wrap">
   <div class="editor-inner">
-    <textarea id="input" spellcheck="false" placeholder="rent 1500&#10;groceries 200 + 150&#10;utilities 80 + 45&#10;total"></textarea>
+    <div class="input-wrap">
+      <div id="highlight" aria-hidden="true"></div>
+      <textarea id="input" spellcheck="false" placeholder="rent 1500&#10;groceries 200 + 150&#10;utilities 80 + 45&#10;total"></textarea>
+    </div>
     <div id="results"></div>
   </div>
 </div>
@@ -107,6 +120,8 @@ const BUILTIN_FUNCS_N = {
 };
 const BUILTIN_FUNC_NAMES = new Set([...Object.keys(BUILTIN_FUNCS_1), ...Object.keys(BUILTIN_FUNCS_N)]);
 const BUILTIN_CONSTS = { pi: Math.PI, e: Math.E, tau: 2 * Math.PI };
+
+const ACTIVE_TYPES = new Set(["NUM","PCT","ADDOP","MULOP","POW","LPAREN","RPAREN","EQ","OF","TOTAL","FUNC","COMMA"]);
 
 // --- Unit conversion tables ---
 const UNIT_TABLE = {
@@ -440,6 +455,94 @@ function formatResult(n, fmtOpts) {
 const DIRECTIVE_RE = /^@(format|separator)\s*=\s*(.+)$/i;
 const FORMAT_RE = /^(minSig|fixed|scientific|auto)(?:\((\d+)\))?$/i;
 
+function classifyLine(text, variables) {
+  const stripped = text.trim();
+  if (!stripped) return "blank";
+  if (stripped.startsWith("#")) return "comment";
+  if (DIRECTIVE_RE.test(stripped)) return "directive";
+
+  const tokens = tokenize(text);
+  const allNames = new Set();
+  for (const k in BUILTIN_CONSTS) allNames.add(k);
+  if (variables) { for (const k in variables) allNames.add(k); }
+
+  // Check if line has any math content
+  const hasMath = tokens.some(t =>
+    t[0] !== "EOF" && (
+      t[0] === "NUM" || t[0] === "PCT" || t[0] === "FUNC" || t[0] === "TOTAL"
+      || (t[0] === "WORD" && allNames.has(t[1].toLowerCase()))
+    )
+  );
+
+  const convIndices = new Set();
+  const eofIdx = tokens.length - 1;
+  if (eofIdx >= 4) {
+    const tTo = tokens[eofIdx - 1];
+    const tKw = tokens[eofIdx - 2];
+    const tFr = tokens[eofIdx - 3];
+    if ((tTo[0] === "WORD" || tTo[0] === "FUNC")
+        && tKw[0] === "WORD" && (tKw[1].toLowerCase() === "in" || tKw[1].toLowerCase() === "to")
+        && (tFr[0] === "WORD" || tFr[0] === "FUNC")) {
+      const frName = tFr[1].toLowerCase();
+      const toName = tTo[1].toLowerCase();
+      if (frName in UNIT_LOOKUP && toName in UNIT_LOOKUP
+          && UNIT_LOOKUP[frName][0] === UNIT_LOOKUP[toName][0]) {
+        convIndices.add(eofIdx - 3);
+        convIndices.add(eofIdx - 2);
+        convIndices.add(eofIdx - 1);
+      }
+    }
+  }
+
+  const spans = [];
+  let pos = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t[0] === "EOF") break;
+    const start = t[2], end = t[3];
+    if (start > pos) spans.push([pos, start, false]);
+    let dim;
+    if (convIndices.has(i)) {
+      dim = false;
+    } else if (ACTIVE_TYPES.has(t[0])) {
+      dim = false;
+    } else if (t[0] === "WORD") {
+      if (allNames.has(t[1].toLowerCase())) {
+        dim = false;
+      } else if (i === 0 && tokens.length > 1 && tokens[1][0] === "EQ") {
+        dim = false;
+      } else {
+        dim = true;
+      }
+    } else {
+      dim = false;
+    }
+    spans.push([start, end, dim]);
+    pos = end;
+  }
+  if (pos < text.length) spans.push([pos, text.length, false]);
+  if (!hasMath) {
+    for (let j = 0; j < spans.length; j++) spans[j][2] = true;
+  }
+  return spans;
+}
+
+function escapeHTML(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function highlightLine(text, cls) {
+  if (cls === "blank") return "";
+  if (cls === "comment") return '<span class="hl-comment">' + escapeHTML(text) + '</span>';
+  if (cls === "directive") return '<span class="hl-dim">' + escapeHTML(text) + '</span>';
+  let html = "";
+  for (const [start, end, dim] of cls) {
+    const chunk = escapeHTML(text.substring(start, end));
+    html += dim ? '<span class="hl-dim">' + chunk + '</span>' : chunk;
+  }
+  return html;
+}
+
 function processText(text) {
   const lines = text.split("\n");
   let variables = Object.create(null);
@@ -449,6 +552,7 @@ function processText(text) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const stripped = line.trim();
+    const cls = classifyLine(line, variables);
     const dm = stripped.match(DIRECTIVE_RE);
     if (dm) {
       const key = dm[1].toLowerCase();
@@ -465,17 +569,17 @@ function processText(text) {
         const v = val.toLowerCase();
         if (["off","underscore","comma","space"].includes(v)) fmtOpts.separator = v;
       }
-      output.push({ result: null });
+      output.push({ result: null, cls });
       continue;
     }
     if (stripped.startsWith("#")) {
       resultsAcc = [];
-      output.push({ result: null });
+      output.push({ result: null, cls });
       continue;
     }
     if (!stripped) {
       resultsAcc.push(null);
-      output.push({ result: null });
+      output.push({ result: null, cls });
       continue;
     }
     const [result, newVars] = evaluateLine(stripped, variables);
@@ -483,13 +587,13 @@ function processText(text) {
     if (result === "TOTAL") {
       const total = resultsAcc.reduce((s, r) => s + (r !== null ? r : 0), 0);
       resultsAcc.push(total);
-      output.push({ result: formatResult(total, { ...fmtOpts }) });
+      output.push({ result: formatResult(total, { ...fmtOpts }), cls });
     } else if (result !== null) {
       resultsAcc.push(result);
-      output.push({ result: formatResult(result, { ...fmtOpts }) });
+      output.push({ result: formatResult(result, { ...fmtOpts }), cls });
     } else {
       resultsAcc.push(null);
-      output.push({ result: null });
+      output.push({ result: null, cls });
     }
   }
   return output;
@@ -501,19 +605,18 @@ function processText(text) {
 // --- UI Wiring ---
 const input = document.getElementById("input");
 const results = document.getElementById("results");
+const highlight = document.getElementById("highlight");
 const shareBtn = document.getElementById("share-btn");
 
 function render() {
   const text = input.value;
+  const lines = text.split("\n");
   const output = processText(text);
   results.innerHTML = output.map(o =>
     '<div class="result-line">' + (o.result !== null ? escapeHTML(o.result) : '') + '</div>'
   ).join("");
+  highlight.innerHTML = output.map((o, i) => highlightLine(lines[i], o.cls)).join("\n");
   scheduleHashUpdate();
-}
-
-function escapeHTML(s) {
-  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 
 input.addEventListener("input", render);
