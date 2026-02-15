@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """calced - a notepad calculator that updates files with results."""
 
 import argparse
@@ -799,7 +798,3 @@ def main():
 
     if args.watch:
         watch_file(args.file, show=args.show)
-
-
-if __name__ == "__main__":
-    main()

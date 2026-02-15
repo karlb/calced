@@ -6,9 +6,9 @@ import importlib.util
 import json
 import os
 
-# Import evaluate_line from the calced script (no .py extension)
+# Import evaluate_line from the calced package
 here = os.path.dirname(os.path.abspath(__file__))
-calced_path = os.path.join(here, "..", "calced")
+calced_path = os.path.join(here, "..", "python", "calced", "__init__.py")
 loader = importlib.machinery.SourceFileLoader("calced", calced_path)
 spec = importlib.util.spec_from_file_location("calced", calced_path, loader=loader,
                                                submodule_search_locations=[])
