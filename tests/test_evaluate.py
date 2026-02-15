@@ -1,21 +1,13 @@
 #!/usr/bin/env python3
 """Test evaluate_line against shared test vectors."""
 
-import importlib.machinery
-import importlib.util
 import json
 import os
+import sys
 
-# Import evaluate_line from the calced package
 here = os.path.dirname(os.path.abspath(__file__))
-calced_path = os.path.join(here, "..", "python", "calced.py")
-loader = importlib.machinery.SourceFileLoader("calced", calced_path)
-spec = importlib.util.spec_from_file_location("calced", calced_path, loader=loader,
-                                               submodule_search_locations=[])
-calced = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(calced)
-
-evaluate_line = calced.evaluate_line
+sys.path.insert(0, os.path.join(here, "..", "python"))
+from calced import evaluate_line
 
 with open(os.path.join(here, "evaluate_vectors.json")) as f:
     vectors = json.load(f)
