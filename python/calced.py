@@ -345,9 +345,6 @@ def classify_line(text, variables):
     """Classify tokens in a line for syntax highlighting.
 
     Returns "blank", "comment", "directive", or list of [start, end, dim] tuples.
-    Tokens are active (not dimmed) only if they actually participate in math
-    evaluation: value tokens (NUM, PCT, variable refs) are always active,
-    structural tokens (operators, parens, etc.) only when the expression parses.
     """
     stripped = text.strip()
     if not stripped:
@@ -360,7 +357,6 @@ def classify_line(text, variables):
     tokens = tokenize(text)
     all_names = set(BUILTIN_CONSTS) | set(variables or {})
 
-    # Check if line has any math content
     has_math = any(
         t[0] in ("NUM", "PCT", "FUNC", "TOTAL")
         or (t[0] == "WORD" and t[1].lower() in all_names)
@@ -368,110 +364,39 @@ def classify_line(text, variables):
         if t[0] != "EOF"
     )
 
-    # Determine which token indices are "active" (part of math)
     active = set()
 
     if has_math:
-        # TOTAL lines: only the TOTAL token is active
         if any(t[0] == "TOTAL" for t in tokens if t[0] != "EOF"):
             for idx, t in enumerate(tokens):
                 if t[0] == "TOTAL":
                     active.add(idx)
         else:
-            # Assignment: WORD = ...
             math_start = 0
             if len(tokens) >= 3 and tokens[0][0] == "WORD" and tokens[1][0] == "EQ":
                 active.add(0)
                 active.add(1)
                 math_start = 2
 
-            # Unit conversion suffix
+            conversion, conv_start = _detect_conversion(tokens)
             eof_idx = len(tokens) - 1
-            conv_start = eof_idx
-            if eof_idx >= 4:
-                t_to = tokens[eof_idx - 1]
-                t_kw = tokens[eof_idx - 2]
-                t_fr = tokens[eof_idx - 3]
-                if (
-                    t_to[0] in ("WORD", "FUNC")
-                    and t_kw[0] == "WORD"
-                    and t_kw[1].lower() in ("in", "to")
-                    and t_fr[0] in ("WORD", "FUNC")
-                ):
-                    fr_name = t_fr[1].lower()
-                    to_name = t_to[1].lower()
-                    if (
-                        fr_name in UNIT_LOOKUP
-                        and to_name in UNIT_LOOKUP
-                        and UNIT_LOOKUP[fr_name][0] == UNIT_LOOKUP[to_name][0]
-                    ):
-                        active.update({eof_idx - 3, eof_idx - 2, eof_idx - 1})
-                        conv_start = eof_idx - 3
+            if conversion is not None:
+                active.update({conv_start, conv_start + 1, conv_start + 2})
 
-            # Build math tokens (mirrors evaluateLine), track original indices
             all_vars = {**BUILTIN_CONSTS, **(variables or {})}
-            math_tokens = []
-            math_to_orig = []
-            paren_depth = 0
-            for idx in range(math_start, len(tokens)):
-                t = tokens[idx]
-                if conv_start <= idx < eof_idx:
-                    continue
-                if t[0] == "WORD":
-                    wl = t[1].lower()
-                    if wl in all_vars:
-                        math_tokens.append(("NUM", all_vars[wl], t[2], t[3]))
-                        math_to_orig.append(idx)
-                elif t[0] == "EQ":
-                    pass
-                elif t[0] == "COMMA" and paren_depth == 0:
-                    pass
-                else:
-                    if t[0] == "LPAREN":
-                        paren_depth += 1
-                    elif t[0] == "RPAREN":
-                        paren_depth -= 1
-                    math_tokens.append(t)
-                    math_to_orig.append(idx)
+            math_tokens, math_to_orig = _build_math(
+                tokens, math_start, conv_start, eof_idx, all_vars
+            )
+            result, consumed = _try_parse(math_tokens)
 
-            # Parse and mark consumed tokens as active
-            try:
-                parser = Parser(math_tokens)
-                parser.parse_expr()
-                if parser.peek()[0] == "EOF":
-                    # Full success: all math tokens active
-                    for orig_idx in math_to_orig:
-                        active.add(orig_idx)
-                else:
-                    # Check for trailing balanced paren annotations
-                    depth = 0
-                    ok = True
-                    for t in math_tokens[parser.pos :]:
-                        if t[0] == "EOF":
-                            break
-                        if depth == 0 and t[0] != "LPAREN":
-                            ok = False
-                            break
-                        if t[0] == "LPAREN":
-                            depth += 1
-                        elif t[0] == "RPAREN":
-                            depth -= 1
-                    if ok and depth == 0:
-                        # Consumed tokens active, trailing parens dimmed
-                        for i in range(parser.pos):
-                            active.add(math_to_orig[i])
-                    else:
-                        # Leftovers: only value tokens active
-                        for i, orig_idx in enumerate(math_to_orig):
-                            if math_tokens[i][0] in ("NUM", "PCT"):
-                                active.add(orig_idx)
-            except (ParseError, ZeroDivisionError, ValueError, OverflowError):
-                # Parse failed: only value tokens active
+            if result is not None:
+                for i in range(consumed):
+                    active.add(math_to_orig[i])
+            else:
                 for i, orig_idx in enumerate(math_to_orig):
                     if math_tokens[i][0] in ("NUM", "PCT"):
                         active.add(orig_idx)
 
-    # Build spans: gaps always dimmed, tokens dimmed unless active
     spans = []
     pos = 0
     for idx, t in enumerate(tokens):
@@ -633,17 +558,99 @@ class Parser:
         raise ParseError(f"Unexpected: {t}")
 
 
+def _detect_conversion(tokens):
+    """Detect unit conversion suffix: ... <from_unit> in|to <to_unit> EOF."""
+    eof_idx = len(tokens) - 1
+    if eof_idx >= 4:
+        t_fr = tokens[eof_idx - 3]
+        t_kw = tokens[eof_idx - 2]
+        t_to = tokens[eof_idx - 1]
+        if (
+            t_to[0] in ("WORD", "FUNC")
+            and t_kw[0] == "WORD"
+            and t_kw[1].lower() in ("in", "to")
+            and t_fr[0] in ("WORD", "FUNC")
+        ):
+            fr_name = t_fr[1].lower()
+            to_name = t_to[1].lower()
+            if fr_name in UNIT_LOOKUP and to_name in UNIT_LOOKUP:
+                fr_dim, fr_factor = UNIT_LOOKUP[fr_name]
+                to_dim, to_factor = UNIT_LOOKUP[to_name]
+                if fr_dim == to_dim:
+                    return (fr_dim, fr_factor, to_factor), eof_idx - 3
+    return None, eof_idx
+
+
+def _build_math(tokens, start, conv_start, eof_idx, all_vars):
+    """Build math token list, resolving variables and skipping non-math tokens.
+
+    Returns (math_tokens, math_to_orig) where math_to_orig[i] is the
+    original token index that math_tokens[i] came from.
+    """
+    math_tokens = []
+    math_to_orig = []
+    paren_depth = 0
+    for idx in range(start, len(tokens)):
+        t = tokens[idx]
+        if conv_start <= idx < eof_idx:
+            continue
+        if t[0] == "WORD":
+            wl = t[1].lower()
+            if wl in all_vars:
+                math_tokens.append(("NUM", all_vars[wl], t[2], t[3]))
+                math_to_orig.append(idx)
+        elif t[0] == "EQ":
+            pass
+        elif t[0] == "COMMA" and paren_depth == 0:
+            pass
+        else:
+            if t[0] == "LPAREN":
+                paren_depth += 1
+            elif t[0] == "RPAREN":
+                paren_depth -= 1
+            math_tokens.append(t)
+            math_to_orig.append(idx)
+    return math_tokens, math_to_orig
+
+
+def _try_parse(math_tokens):
+    """Parse math tokens, allowing trailing balanced parenthetical annotations.
+
+    Returns (result, consumed) on success, or (None, -1) on failure.
+    """
+    try:
+        parser = Parser(math_tokens)
+        result = parser.parse_expr()
+        if parser.peek()[0] == "EOF":
+            return result, parser.pos
+        depth = 0
+        ok = True
+        for t in math_tokens[parser.pos :]:
+            if t[0] == "EOF":
+                break
+            if depth == 0 and t[0] != "LPAREN":
+                ok = False
+                break
+            if t[0] == "LPAREN":
+                depth += 1
+            elif t[0] == "RPAREN":
+                depth -= 1
+        if ok and depth == 0:
+            return result, parser.pos
+        return None, -1
+    except (ParseError, ZeroDivisionError, ValueError, OverflowError):
+        return None, -1
+
+
 def evaluate_line(text, variables):
     """Evaluate a line. Returns (result, variables) or (None, variables)."""
     tokens = tokenize(text)
 
-    # Check for total/sum
     if any(t[0] == "TOTAL" for t in tokens):
         return "TOTAL", variables
 
     all_vars = {**BUILTIN_CONSTS, **variables}
 
-    # Must have at least one number, variable reference, or function call
     has_value = any(
         t[0] in ("NUM", "PCT", "FUNC") or (t[0] == "WORD" and t[1].lower() in all_vars)
         for t in tokens
@@ -651,87 +658,28 @@ def evaluate_line(text, variables):
     if not has_value:
         return None, variables
 
-    # Check for variable assignment: WORD = ...
     pos = 0
     var_name = None
     if len(tokens) >= 3 and tokens[0][0] == "WORD" and tokens[1][0] == "EQ":
         var_name = tokens[0][1].lower()
         pos = 2
 
-    # Detect unit conversion suffix: ... <from_unit> in|to <to_unit> EOF
-    conversion = None
-    conv_end = len(tokens) - 1  # index of EOF
-    if conv_end >= 4:
-        t_to = tokens[conv_end - 1]
-        t_kw = tokens[conv_end - 2]
-        t_fr = tokens[conv_end - 3]
-        if (
-            t_to[0] in ("WORD", "FUNC")
-            and t_kw[0] == "WORD"
-            and t_kw[1].lower() in ("in", "to")
-            and t_fr[0] in ("WORD", "FUNC")
-        ):
-            to_name = t_to[1].lower()
-            fr_name = t_fr[1].lower()
-            if fr_name in UNIT_LOOKUP and to_name in UNIT_LOOKUP:
-                fr_dim, fr_factor = UNIT_LOOKUP[fr_name]
-                to_dim, to_factor = UNIT_LOOKUP[to_name]
-                if fr_dim == to_dim:
-                    conversion = (fr_dim, fr_factor, to_factor)
-                    # Remove the 3 conversion tokens (keep EOF)
-                    tokens = tokens[: conv_end - 3] + [tokens[conv_end]]
+    conversion, conv_start = _detect_conversion(tokens)
+    eof_idx = len(tokens) - 1
+    math_tokens, _ = _build_math(tokens, pos, conv_start, eof_idx, all_vars)
+    result, _ = _try_parse(math_tokens)
 
-    # Build math token list (resolve variables, skip plain words)
-    math_tokens = []
-    paren_depth = 0
-    for t in tokens[pos:]:
-        if t[0] == "WORD":
-            wl = t[1].lower()
-            if wl in all_vars:
-                math_tokens.append(("NUM", all_vars[wl]))
-            # else skip
-        elif t[0] == "EQ":
-            pass  # skip stray equals
-        elif t[0] == "COMMA" and paren_depth == 0:
-            pass  # skip top-level commas
-        else:
-            if t[0] == "LPAREN":
-                paren_depth += 1
-            elif t[0] == "RPAREN":
-                paren_depth -= 1
-            math_tokens.append(t)
-
-    try:
-        parser = Parser(math_tokens)
-        result = parser.parse_expr()
-        if parser.peek()[0] != "EOF":
-            # Allow trailing balanced parenthetical annotations
-            # e.g. "2*3 (see http://example.com)" → 6
-            depth = 0
-            ok = True
-            for t in math_tokens[parser.pos :]:
-                if t[0] == "EOF":
-                    break
-                if depth == 0 and t[0] != "LPAREN":
-                    ok = False
-                    break
-                if t[0] == "LPAREN":
-                    depth += 1
-                elif t[0] == "RPAREN":
-                    depth -= 1
-            if not (ok and depth == 0):
-                return None, variables
-        if conversion is not None:
-            dim, from_factor, to_factor = conversion
-            if dim == "temperature":
-                result = convert_temperature(result, from_factor, to_factor)
-            else:
-                result = result * from_factor / to_factor
-        if var_name:
-            variables = {**variables, var_name: result}
-        return result, variables
-    except (ParseError, ZeroDivisionError, ValueError, OverflowError):
+    if result is None:
         return None, variables
+    if conversion is not None:
+        dim, from_factor, to_factor = conversion
+        if dim == "temperature":
+            result = convert_temperature(result, from_factor, to_factor)
+        else:
+            result = result * from_factor / to_factor
+    if var_name:
+        variables = {**variables, var_name: result}
+    return result, variables
 
 
 def format_result(n, fmt_opts=None):

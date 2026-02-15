@@ -333,8 +333,76 @@ class Parser {
   }
 }
 
+function _detectConversion(tokens) {
+  const eofIdx = tokens.length - 1;
+  if (eofIdx >= 4) {
+    const tFr = tokens[eofIdx - 3];
+    const tKw = tokens[eofIdx - 2];
+    const tTo = tokens[eofIdx - 1];
+    if ((tTo[0] === "WORD" || tTo[0] === "FUNC")
+        && tKw[0] === "WORD" && (tKw[1].toLowerCase() === "in" || tKw[1].toLowerCase() === "to")
+        && (tFr[0] === "WORD" || tFr[0] === "FUNC")) {
+      const frName = tFr[1].toLowerCase();
+      const toName = tTo[1].toLowerCase();
+      if (frName in UNIT_LOOKUP && toName in UNIT_LOOKUP) {
+        const [frDim, frFactor] = UNIT_LOOKUP[frName];
+        const [toDim, toFactor] = UNIT_LOOKUP[toName];
+        if (frDim === toDim) return [[frDim, frFactor, toFactor], eofIdx - 3];
+      }
+    }
+  }
+  return [null, eofIdx];
+}
+
+function _buildMath(tokens, start, convStart, eofIdx, allVars) {
+  const mathTokens = [];
+  const mathToOrig = [];
+  let parenDepth = 0;
+  for (let idx = start; idx < tokens.length; idx++) {
+    const t = tokens[idx];
+    if (idx >= convStart && idx < eofIdx) continue;
+    if (t[0] === "WORD") {
+      const wl = t[1].toLowerCase();
+      if (wl in allVars) {
+        mathTokens.push(["NUM", allVars[wl], t[2], t[3]]);
+        mathToOrig.push(idx);
+      }
+    } else if (t[0] === "EQ") {
+      // skip
+    } else if (t[0] === "COMMA" && parenDepth === 0) {
+      // skip
+    } else {
+      if (t[0] === "LPAREN") parenDepth++;
+      else if (t[0] === "RPAREN") parenDepth--;
+      mathTokens.push(t);
+      mathToOrig.push(idx);
+    }
+  }
+  return [mathTokens, mathToOrig];
+}
+
+function _tryParse(mathTokens) {
+  try {
+    const parser = new Parser(mathTokens);
+    const result = parser.parseExpr();
+    if (parser.peek()[0] === "EOF") return [result, parser.pos];
+    let depth = 0, ok = true;
+    for (let k = parser.pos; k < mathTokens.length; k++) {
+      const tt = mathTokens[k][0];
+      if (tt === "EOF") break;
+      if (depth === 0 && tt !== "LPAREN") { ok = false; break; }
+      if (tt === "LPAREN") depth++;
+      else if (tt === "RPAREN") depth--;
+    }
+    if (ok && depth === 0) return [result, parser.pos];
+    return [null, -1];
+  } catch (e) {
+    return [null, -1];
+  }
+}
+
 function evaluateLine(text, variables) {
-  let tokens = tokenize(text);
+  const tokens = tokenize(text);
   if (tokens.some(t => t[0] === "TOTAL")) return ["TOTAL", variables];
   const allVars = Object.create(null);
   for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
@@ -349,78 +417,23 @@ function evaluateLine(text, variables) {
     varName = tokens[0][1].toLowerCase();
     pos = 2;
   }
-  // Detect unit conversion suffix: ... <from_unit> in|to <to_unit> EOF
-  let conversion = null;
+  const [conversion, convStart] = _detectConversion(tokens);
   const eofIdx = tokens.length - 1;
-  if (eofIdx >= 4) {
-    const tTo = tokens[eofIdx - 1];
-    const tKw = tokens[eofIdx - 2];
-    const tFr = tokens[eofIdx - 3];
-    if ((tTo[0] === "WORD" || tTo[0] === "FUNC")
-        && tKw[0] === "WORD" && (tKw[1].toLowerCase() === "in" || tKw[1].toLowerCase() === "to")
-        && (tFr[0] === "WORD" || tFr[0] === "FUNC")) {
-      const frName = tFr[1].toLowerCase();
-      const toName = tTo[1].toLowerCase();
-      if (frName in UNIT_LOOKUP && toName in UNIT_LOOKUP) {
-        const [frDim, frFactor] = UNIT_LOOKUP[frName];
-        const [toDim, toFactor] = UNIT_LOOKUP[toName];
-        if (frDim === toDim) {
-          conversion = [frDim, frFactor, toFactor];
-          tokens = [...tokens.slice(0, eofIdx - 3), tokens[eofIdx]];
-        }
-      }
-    }
+  const [mathTokens] = _buildMath(tokens, pos, convStart, eofIdx, allVars);
+  let [result] = _tryParse(mathTokens);
+  if (result === null) return [null, variables];
+  if (conversion !== null) {
+    const [dim, fromFactor, toFactor] = conversion;
+    if (dim === "temperature") result = convertTemperature(result, fromFactor, toFactor);
+    else result = result * fromFactor / toFactor;
   }
-  const mathTokens = [];
-  let parenDepth = 0;
-  for (let j = pos; j < tokens.length; j++) {
-    const t = tokens[j];
-    if (t[0] === "WORD") {
-      const wl = t[1].toLowerCase();
-      if (wl in allVars) mathTokens.push(["NUM", allVars[wl]]);
-    } else if (t[0] === "EQ") {
-      // skip
-    } else if (t[0] === "COMMA" && parenDepth === 0) {
-      // skip top-level commas
-    } else {
-      if (t[0] === "LPAREN") parenDepth++;
-      else if (t[0] === "RPAREN") parenDepth--;
-      mathTokens.push(t);
-    }
+  if (varName) {
+    const newVars = Object.create(null);
+    for (const k in variables) newVars[k] = variables[k];
+    newVars[varName] = result;
+    return [result, newVars];
   }
-  try {
-    const parser = new Parser(mathTokens);
-    let result = parser.parseExpr();
-    if (parser.peek()[0] !== "EOF") {
-      // Allow trailing balanced parenthetical annotations
-      let depth = 0, ok = true;
-      for (let k = parser.pos; k < mathTokens.length; k++) {
-        const tt = mathTokens[k][0];
-        if (tt === "EOF") break;
-        if (depth === 0 && tt !== "LPAREN") { ok = false; break; }
-        if (tt === "LPAREN") depth++;
-        else if (tt === "RPAREN") depth--;
-      }
-      if (!(ok && depth === 0)) return [null, variables];
-    }
-    if (conversion !== null) {
-      const [dim, fromFactor, toFactor] = conversion;
-      if (dim === "temperature") {
-        result = convertTemperature(result, fromFactor, toFactor);
-      } else {
-        result = result * fromFactor / toFactor;
-      }
-    }
-    if (varName) {
-      const newVars = Object.create(null);
-      for (const k in variables) newVars[k] = variables[k];
-      newVars[varName] = result;
-      return [result, newVars];
-    }
-    return [result, variables];
-  } catch (e) {
-    return [null, variables];
-  }
+  return [result, variables];
 }
 
 function addCommas(s) {
@@ -488,17 +501,14 @@ function classifyLine(text, variables) {
     )
   );
 
-  // Determine which token indices are "active" (part of math)
   const active = new Set();
 
   if (hasMath) {
-    // TOTAL lines: only the TOTAL token is active
     if (tokens.some(t => t[0] === "TOTAL")) {
       for (let i = 0; i < tokens.length; i++) {
         if (tokens[i][0] === "TOTAL") active.add(i);
       }
     } else {
-      // Assignment: WORD = ...
       let mathStart = 0;
       if (tokens.length >= 3 && tokens[0][0] === "WORD" && tokens[1][0] === "EQ") {
         active.add(0);
@@ -506,98 +516,32 @@ function classifyLine(text, variables) {
         mathStart = 2;
       }
 
-      // Unit conversion suffix
+      const [conversion, convStart] = _detectConversion(tokens);
       const eofIdx = tokens.length - 1;
-      let convStart = eofIdx;
-      if (eofIdx >= 4) {
-        const tTo = tokens[eofIdx - 1];
-        const tKw = tokens[eofIdx - 2];
-        const tFr = tokens[eofIdx - 3];
-        if ((tTo[0] === "WORD" || tTo[0] === "FUNC")
-            && tKw[0] === "WORD" && (tKw[1].toLowerCase() === "in" || tKw[1].toLowerCase() === "to")
-            && (tFr[0] === "WORD" || tFr[0] === "FUNC")) {
-          const frName = tFr[1].toLowerCase();
-          const toName = tTo[1].toLowerCase();
-          if (frName in UNIT_LOOKUP && toName in UNIT_LOOKUP
-              && UNIT_LOOKUP[frName][0] === UNIT_LOOKUP[toName][0]) {
-            active.add(eofIdx - 3);
-            active.add(eofIdx - 2);
-            active.add(eofIdx - 1);
-            convStart = eofIdx - 3;
-          }
-        }
+      if (conversion !== null) {
+        active.add(convStart);
+        active.add(convStart + 1);
+        active.add(convStart + 2);
       }
 
-      // Build math tokens (mirrors evaluateLine), track original indices
       const allVars = Object.create(null);
       for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
       if (variables) { for (const k in variables) allVars[k] = variables[k]; }
-      const mathTokens = [];
-      const mathToOrig = [];
-      let parenDepth = 0;
-      for (let idx = mathStart; idx < tokens.length; idx++) {
-        const t = tokens[idx];
-        if (idx >= convStart && idx < eofIdx) continue;
-        if (t[0] === "WORD") {
-          const wl = t[1].toLowerCase();
-          if (wl in allVars) {
-            mathTokens.push(["NUM", allVars[wl], t[2], t[3]]);
-            mathToOrig.push(idx);
-          }
-        } else if (t[0] === "EQ") {
-          // skip
-        } else if (t[0] === "COMMA" && parenDepth === 0) {
-          // skip top-level commas
-        } else {
-          if (t[0] === "LPAREN") parenDepth++;
-          else if (t[0] === "RPAREN") parenDepth--;
-          mathTokens.push(t);
-          mathToOrig.push(idx);
-        }
-      }
+      const [mathTokens, mathToOrig] = _buildMath(tokens, mathStart, convStart, eofIdx, allVars);
+      const [result, consumed] = _tryParse(mathTokens);
 
-      // Parse and mark consumed tokens as active
-      let fullSuccess = false;
-      try {
-        const parser = new Parser(mathTokens);
-        parser.parseExpr();
-        fullSuccess = parser.peek()[0] === "EOF";
-      } catch (e) {
-        // parse failed
-      }
-      if (fullSuccess) {
-        for (const origIdx of mathToOrig) active.add(origIdx);
+      if (result !== null) {
+        for (let i = 0; i < consumed; i++) active.add(mathToOrig[i]);
       } else {
-        // Check for trailing balanced paren annotations
-        let depth = 0, ok = true, trailPos = -1;
-        try {
-          const p2 = new Parser(mathTokens);
-          p2.parseExpr();
-          trailPos = p2.pos;
-          for (let k = trailPos; k < mathTokens.length; k++) {
-            const tt = mathTokens[k][0];
-            if (tt === "EOF") break;
-            if (depth === 0 && tt !== "LPAREN") { ok = false; break; }
-            if (tt === "LPAREN") depth++;
-            else if (tt === "RPAREN") depth--;
-          }
-        } catch (e) { ok = false; }
-        if (ok && depth === 0 && trailPos > 0) {
-          // Consumed tokens active, trailing parens dimmed
-          for (let i = 0; i < trailPos; i++) active.add(mathToOrig[i]);
-        } else {
-          // Only value tokens (NUM, PCT) are active
-          for (let i = 0; i < mathToOrig.length; i++) {
-            if (mathTokens[i][0] === "NUM" || mathTokens[i][0] === "PCT") {
-              active.add(mathToOrig[i]);
-            }
+        for (let i = 0; i < mathToOrig.length; i++) {
+          if (mathTokens[i][0] === "NUM" || mathTokens[i][0] === "PCT") {
+            active.add(mathToOrig[i]);
           }
         }
       }
     }
   }
 
-  // Build spans: gaps always dimmed, tokens dimmed unless active
   const spans = [];
   let pos = 0;
   for (let i = 0; i < tokens.length; i++) {
