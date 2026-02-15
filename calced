@@ -244,7 +244,6 @@ def tokenize(text):
     return tokens
 
 
-ACTIVE_TYPES = {"NUM", "PCT", "ADDOP", "MULOP", "POW", "LPAREN", "RPAREN", "EQ", "OF", "TOTAL", "FUNC", "COMMA"}
 DIM = "\033[2m"
 BOLD = "\033[1m"
 GREEN = "\033[32m"
@@ -255,6 +254,9 @@ def classify_line(text, variables):
     """Classify tokens in a line for syntax highlighting.
 
     Returns "blank", "comment", "directive", or list of [start, end, dim] tuples.
+    Tokens are active (not dimmed) only if they actually participate in math
+    evaluation: value tokens (NUM, PCT, variable refs) are always active,
+    structural tokens (operators, parens, etc.) only when the expression parses.
     """
     stripped = text.strip()
     if not stripped:
@@ -274,22 +276,83 @@ def classify_line(text, variables):
         for t in tokens if t[0] != "EOF"
     )
 
-    # Detect unit conversion suffix
-    conv_indices = set()
-    eof_idx = len(tokens) - 1
-    if eof_idx >= 4:
-        t_to = tokens[eof_idx - 1]
-        t_kw = tokens[eof_idx - 2]
-        t_fr = tokens[eof_idx - 3]
-        if (t_to[0] in ("WORD", "FUNC") and t_kw[0] == "WORD"
-                and t_kw[1].lower() in ("in", "to")
-                and t_fr[0] in ("WORD", "FUNC")):
-            fr_name = t_fr[1].lower()
-            to_name = t_to[1].lower()
-            if (fr_name in UNIT_LOOKUP and to_name in UNIT_LOOKUP
-                    and UNIT_LOOKUP[fr_name][0] == UNIT_LOOKUP[to_name][0]):
-                conv_indices = {eof_idx - 3, eof_idx - 2, eof_idx - 1}
+    # Determine which token indices are "active" (part of math)
+    active = set()
 
+    if has_math:
+        # TOTAL lines: only the TOTAL token is active
+        if any(t[0] == "TOTAL" for t in tokens if t[0] != "EOF"):
+            for idx, t in enumerate(tokens):
+                if t[0] == "TOTAL":
+                    active.add(idx)
+        else:
+            # Assignment: WORD = ...
+            math_start = 0
+            if (len(tokens) >= 3 and tokens[0][0] == "WORD"
+                    and tokens[1][0] == "EQ"):
+                active.add(0)
+                active.add(1)
+                math_start = 2
+
+            # Unit conversion suffix
+            eof_idx = len(tokens) - 1
+            conv_start = eof_idx
+            if eof_idx >= 4:
+                t_to = tokens[eof_idx - 1]
+                t_kw = tokens[eof_idx - 2]
+                t_fr = tokens[eof_idx - 3]
+                if (t_to[0] in ("WORD", "FUNC") and t_kw[0] == "WORD"
+                        and t_kw[1].lower() in ("in", "to")
+                        and t_fr[0] in ("WORD", "FUNC")):
+                    fr_name = t_fr[1].lower()
+                    to_name = t_to[1].lower()
+                    if (fr_name in UNIT_LOOKUP and to_name in UNIT_LOOKUP
+                            and UNIT_LOOKUP[fr_name][0]
+                            == UNIT_LOOKUP[to_name][0]):
+                        active.update(
+                            {eof_idx - 3, eof_idx - 2, eof_idx - 1})
+                        conv_start = eof_idx - 3
+
+            # Build math tokens (mirrors evaluateLine), track original indices
+            all_vars = {**BUILTIN_CONSTS, **(variables or {})}
+            math_tokens = []
+            math_to_orig = []
+            for idx in range(math_start, len(tokens)):
+                t = tokens[idx]
+                if conv_start <= idx < eof_idx:
+                    continue
+                if t[0] == "WORD":
+                    wl = t[1].lower()
+                    if wl in all_vars:
+                        math_tokens.append(("NUM", all_vars[wl], t[2], t[3]))
+                        math_to_orig.append(idx)
+                elif t[0] == "EQ":
+                    pass
+                else:
+                    math_tokens.append(t)
+                    math_to_orig.append(idx)
+
+            # Parse and mark consumed tokens as active
+            try:
+                parser = Parser(math_tokens)
+                parser.parse_expr()
+                if parser.peek()[0] == "EOF":
+                    # Full success: all math tokens active
+                    for orig_idx in math_to_orig:
+                        active.add(orig_idx)
+                else:
+                    # Leftovers: only value tokens active
+                    for i, orig_idx in enumerate(math_to_orig):
+                        if math_tokens[i][0] in ("NUM", "PCT"):
+                            active.add(orig_idx)
+            except (ParseError, ZeroDivisionError, ValueError,
+                    OverflowError):
+                # Parse failed: only value tokens active
+                for i, orig_idx in enumerate(math_to_orig):
+                    if math_tokens[i][0] in ("NUM", "PCT"):
+                        active.add(orig_idx)
+
+    # Build spans: gaps always dimmed, tokens dimmed unless active
     spans = []
     pos = 0
     for idx, t in enumerate(tokens):
@@ -297,26 +360,11 @@ def classify_line(text, variables):
             break
         start, end = t[2], t[3]
         if start > pos:
-            spans.append([pos, start, False])
-        if idx in conv_indices:
-            dim = False
-        elif t[0] in ACTIVE_TYPES:
-            dim = False
-        elif t[0] == "WORD":
-            if t[1].lower() in all_names:
-                dim = False
-            elif idx == 0 and len(tokens) > 1 and tokens[1][0] == "EQ":
-                dim = False
-            else:
-                dim = True
-        else:
-            dim = False
-        spans.append([start, end, dim])
+            spans.append([pos, start, True])
+        spans.append([start, end, idx not in active])
         pos = end
     if pos < len(text):
-        spans.append([pos, len(text), False])
-    if not has_math:
-        spans = [[s, e, True] for s, e, _ in spans]
+        spans.append([pos, len(text), True])
     return spans
 
 
