@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /**
- * Test runner for the JS calced engine against shared tests/*.md files.
- * Extracts the engine from index.html and validates against expected results.
+ * Test runner for the JS calced engine.
+ * Extracts the engine from index.html and runs:
+ *   1. Unit vectors from tests/classify_vectors.json and tests/evaluate_vectors.json
+ *   2. Integration tests from tests/*.md
  */
 import { readFileSync, readdirSync } from "fs";
 import { join, dirname } from "path";
@@ -23,12 +25,46 @@ if (startIdx === -1 || endIdx === -1) {
 }
 const engineCode = html.slice(startIdx, endIdx);
 
-// Evaluate the engine code in a function scope and extract processText
-const ns = {};
-const wrappedCode = engineCode + "\nreturn { processText, tokenize, evaluateLine, formatResult };";
-const factory = new Function(wrappedCode);
-const engine = factory();
-const { processText } = engine;
+// Evaluate the engine code in a function scope and extract exports
+const wrappedCode = engineCode + "\nreturn { processText, evaluateLine, classifyLine, formatResult };";
+const engine = new Function(wrappedCode)();
+const { processText, evaluateLine, classifyLine } = engine;
+
+// --- Unit vector tests ---
+let unitFailures = 0;
+
+const classifyVectors = JSON.parse(readFileSync(join(testsDir, "classify_vectors.json"), "utf8"));
+for (let i = 0; i < classifyVectors.length; i++) {
+  const v = classifyVectors[i];
+  const result = classifyLine(v.text, v.variables);
+  if (JSON.stringify(result) !== JSON.stringify(v.expected)) {
+    console.error(`FAIL classify vector ${i}: ${JSON.stringify(v.text)}`);
+    if (v.note) console.error(`  note: ${v.note}`);
+    console.error(`  expected: ${JSON.stringify(v.expected)}`);
+    console.error(`  got:      ${JSON.stringify(result)}`);
+    unitFailures++;
+  }
+}
+
+const evaluateVectors = JSON.parse(readFileSync(join(testsDir, "evaluate_vectors.json"), "utf8"));
+for (let i = 0; i < evaluateVectors.length; i++) {
+  const v = evaluateVectors[i];
+  const [result] = evaluateLine(v.text, v.variables);
+  if (result !== v.expected) {
+    console.error(`FAIL evaluate vector ${i}: ${JSON.stringify(v.text)}`);
+    console.error(`  expected: ${JSON.stringify(v.expected)}`);
+    console.error(`  got:      ${JSON.stringify(result)}`);
+    unitFailures++;
+  }
+}
+
+const unitTotal = classifyVectors.length + evaluateVectors.length;
+if (unitFailures) {
+  console.log(`FAIL unit vectors (${unitTotal - unitFailures}/${unitTotal} passed)`);
+} else {
+  console.log(`PASS unit vectors (${unitTotal}/${unitTotal} passed)`);
+}
+
 
 const RESULT_RE = /\s{2,}# => .*$/;
 
