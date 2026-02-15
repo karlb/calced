@@ -50,7 +50,7 @@ header div { display: flex; gap: 8px; }
   display: flex; min-height: 100%;
 }
 .input-wrap {
-  flex: 1 1 0; min-width: 0; align-self: flex-start; min-height: 100%;
+  flex: 1 1 0; min-width: 0; min-height: 100%;
   display: grid; background: var(--surface);
 }
 .input-wrap > * {
@@ -58,6 +58,7 @@ header div { display: flex; gap: 8px; }
   white-space: pre-wrap; tab-size: 4; overflow-wrap: break-word; word-break: break-all;
 }
 #highlight { pointer-events: none; color: var(--text); }
+.hl-line { min-height: 1lh; }
 #input {
   field-sizing: content; color: transparent; caret-color: var(--text);
   background: transparent; border: none; resize: none;
@@ -72,7 +73,7 @@ header div { display: flex; gap: 8px; }
   overflow: hidden; user-select: none;
 }
 .result-line {
-  height: 1lh; line-height: 1.7; text-align: right;
+  line-height: 1.7; text-align: right;
   color: var(--result); white-space: nowrap; overflow: hidden;
 }
 </style>
@@ -615,7 +616,15 @@ function render() {
   results.innerHTML = output.map(o =>
     '<div class="result-line">' + (o.result !== null ? escapeHTML(o.result) : '') + '</div>'
   ).join("");
-  highlight.innerHTML = output.map((o, i) => highlightLine(lines[i], o.cls)).join("\n");
+  highlight.innerHTML = output.map((o, i) =>
+    '<div class="hl-line">' + highlightLine(lines[i], o.cls) + '</div>'
+  ).join("");
+  // Sync result line heights with highlight line heights
+  const hlLines = highlight.children;
+  const resLines = results.children;
+  for (let i = 0; i < hlLines.length && i < resLines.length; i++) {
+    resLines[i].style.height = hlLines[i].offsetHeight + 'px';
+  }
   scheduleHashUpdate();
 }
 
