@@ -505,7 +505,7 @@ class Parser:
         base = self.parse_unary()
         if self.peek()[0] == "POW":
             self.consume()
-            exp = self.parse_unary()
+            exp = self.parse_power()
             return base**exp
         return base
 
