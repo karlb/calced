@@ -1,4 +1,4 @@
-.PHONY: README.md deploy-web
+.PHONY: README.md deploy-web build-pypi
 README.md:
 	uvx --from cogapp cog -r README.md
 
@@ -30,3 +30,11 @@ deploy-web:
 	printf '<!DOCTYPE html>\n<html>\n<head><meta http-equiv="refresh" content="0;url=./'"$$MAJOR"'/"></head>\n<body></body>\n</html>\n' > "$$TMPDIR/index.html"; \
 	touch "$$TMPDIR/.nojekyll"; \
 	cd "$$TMPDIR" && git add -A && git commit -m "Deploy web app v$$VERSION" && git push origin gh-pages
+
+build-pypi:
+	cp README.md LICENSE python/
+	cd python && uv build
+	rm python/README.md python/LICENSE
+
+release-python: build-pypi
+	uv publish python/dist/*

@@ -7,6 +7,25 @@ name = "calced"
 version = "0.1.0"
 requires-python = ">=3.9"
 description = "A notepad calculator that evaluates expressions in text files"
+readme = "README.md"
+license = "MIT"
+authors = [{name = "Karl Bartel", email = "karl@karl.berlin"}]
+keywords = ["calculator", "notepad", "math", "cli"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Environment :: Console",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Utilities",
+]
 
 [project.scripts]
 calced = "calced:main"
+
+[project.urls]
+Homepage = "https://karlb.github.io/calced/"
+Repository = "https://github.com/karlb/calced"
+Issues = "https://github.com/karlb/calced/issues"
+
+[tool.hatch.build]
+include = ["calced.py", "README.md", "LICENSE"]
