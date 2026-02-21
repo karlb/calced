@@ -733,7 +733,12 @@ def process_file(filepath, show=False):
     with open(filepath, "r") as f:
         original = f.read()
 
-    use_color = show and not os.environ.get("NO_COLOR", "")
+    use_color = (
+        show
+        and sys.stdout.isatty()
+        and not os.environ.get("NO_COLOR", "")
+        and os.environ.get("TERM") != "dumb"
+    )
 
     lines = original.split("\n")
     # Remove trailing empty element from split (file ended with \n)
