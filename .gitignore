@@ -2,3 +2,5 @@ __pycache__/
 *.pyc
 python/README.md
 python/LICENSE
+# No dependencies to pin, so lock file adds no value
+python/uv.lock
