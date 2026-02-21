@@ -5,9 +5,7 @@ README.md:
 test: test-py test-js
 
 test-py:
-	python3 tests/test_classify.py
-	python3 tests/test_evaluate.py
-	python3 tests/test_cli.py
+	python3 -m unittest discover -s tests
 	@for f in tests/*.md; do python/calced.py "$$f"; done
 	git diff --exit-code -- tests/*.md
 
