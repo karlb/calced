@@ -3,6 +3,7 @@
 
 import argparse
 import base64
+import difflib
 import importlib.metadata
 import json
 import math
@@ -729,7 +730,7 @@ def format_result(n, fmt_opts=None):
     return str(n)
 
 
-def process_file(filepath, show=False, no_color=False, stdin_content=None):
+def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_run=False):
     """Read, evaluate, and write back the file with results (or print to stdout)."""
     if stdin_content is not None:
         original = stdin_content
@@ -845,6 +846,17 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None):
         else:
             sys.stdout.write(new_content)
         return new_content != original
+    if dry_run:
+        if new_content != original:
+            diff = difflib.unified_diff(
+                original.splitlines(keepends=True),
+                new_content.splitlines(keepends=True),
+                fromfile=filepath,
+                tofile=filepath,
+            )
+            sys.stdout.writelines(diff)
+            return True
+        return False
     if new_content != original:
         with open(filepath, "w") as f:
             f.write(new_content)
@@ -986,6 +998,12 @@ def main():
         action="store_true",
         help="output results as JSON",
     )
+    output_group.add_argument(
+        "-n",
+        "--dry-run",
+        action="store_true",
+        help="show diff of what would change without updating the file",
+    )
     parser.add_argument(
         "--no-color",
         action="store_true",
@@ -993,8 +1011,8 @@ def main():
     )
     args = parser.parse_args()
 
-    if args.watch and (args.url or args.json):
-        parser.error("--watch cannot be used with --url or --json")
+    if args.watch and (args.url or args.json or args.dry_run):
+        parser.error("--watch cannot be used with --url, --json, or --dry-run")
 
     if args.file == "-":
         if args.json:
@@ -1024,6 +1042,10 @@ def main():
             content = f.read()
         print(json.dumps(process_json(content), indent=2))
         return
+
+    if args.dry_run:
+        changed = process_file(args.file, dry_run=True)
+        sys.exit(1 if changed else 0)
 
     if args.show and args.watch:
         sys.stderr.write("\033[2J\033[H")
