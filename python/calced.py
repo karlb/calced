@@ -4,6 +4,7 @@
 import argparse
 import base64
 import importlib.metadata
+import json
 import math
 import os
 import re
@@ -851,6 +852,73 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None):
     return False
 
 
+def process_json(content):
+    """Evaluate content and return structured results as a list of dicts."""
+    lines = content.split("\n")
+    if lines and lines[-1] == "":
+        lines = lines[:-1]
+
+    variables = {}
+    results_acc = []
+    fmt_opts = {"mode": "minSig", "precision": 3, "separator": "underscore"}
+    output = []
+
+    for line in lines:
+        clean = RESULT_RE.sub("", line).rstrip()
+        stripped = clean.strip()
+
+        dm = DIRECTIVE_RE.match(stripped)
+        if dm:
+            key = dm.group(1).lower()
+            val = dm.group(2).strip()
+            if key == "format":
+                fm = FORMAT_RE.match(val)
+                if fm:
+                    mode = fm.group(1).lower()
+                    mode_map = {
+                        "minsig": "minSig",
+                        "fixed": "fixed",
+                        "scientific": "scientific",
+                        "auto": "auto",
+                    }
+                    fmt_opts["mode"] = mode_map.get(mode, mode)
+                    if fm.group(2) is not None:
+                        fmt_opts["precision"] = int(fm.group(2))
+                    else:
+                        fmt_opts["precision"] = 3
+            elif key == "separator":
+                v = val.lower()
+                if v in ("off", "underscore", "comma", "space"):
+                    fmt_opts["separator"] = v
+            output.append({"input": clean, "result": None})
+            continue
+
+        if stripped.startswith("#"):
+            results_acc.clear()
+            output.append({"input": clean, "result": None})
+            continue
+
+        if not stripped:
+            results_acc.append(None)
+            output.append({"input": "", "result": None})
+            continue
+
+        result, variables = evaluate_line(stripped, variables)
+
+        if result == "TOTAL":
+            total = sum(r for r in results_acc if r is not None)
+            results_acc.append(total)
+            output.append({"input": clean, "result": total})
+        elif result is not None:
+            results_acc.append(result)
+            output.append({"input": clean, "result": result})
+        else:
+            results_acc.append(None)
+            output.append({"input": clean, "result": None})
+
+    return output
+
+
 def watch_file(filepath, show=False, no_color=False, interval=0.5):
     """Watch file for changes and re-process."""
     last_mtime = os.path.getmtime(filepath)
@@ -900,17 +968,23 @@ def main():
     parser.add_argument(
         "-w", "--watch", action="store_true", help="watch for changes and auto-update"
     )
-    parser.add_argument(
+    output_group = parser.add_mutually_exclusive_group()
+    output_group.add_argument(
         "-s",
         "--show",
         action="store_true",
         help="print result to stdout instead of updating the file",
     )
-    parser.add_argument(
+    output_group.add_argument(
         "-u",
         "--url",
         action="store_true",
         help="print URL for the web version of the file",
+    )
+    output_group.add_argument(
+        "--json",
+        action="store_true",
+        help="output results as JSON",
     )
     parser.add_argument(
         "--no-color",
@@ -919,9 +993,16 @@ def main():
     )
     args = parser.parse_args()
 
+    if args.watch and (args.url or args.json):
+        parser.error("--watch cannot be used with --url or --json")
+
     if args.file == "-":
-        content = sys.stdin.read()
-        process_file(None, show=True, no_color=args.no_color, stdin_content=content)
+        if args.json:
+            content = sys.stdin.read()
+            print(json.dumps(process_json(content), indent=2))
+        else:
+            content = sys.stdin.read()
+            process_file(None, show=True, no_color=args.no_color, stdin_content=content)
         return
 
     if not os.path.exists(args.file):
@@ -936,6 +1017,12 @@ def main():
         encoded = encoded.replace("+", "-").replace("/", "_").rstrip("=")
         major = _get_version().split(".")[0]
         print(f"https://calced.karl.berlin/{major}/#{encoded}")
+        return
+
+    if args.json:
+        with open(args.file) as f:
+            content = f.read()
+        print(json.dumps(process_json(content), indent=2))
         return
 
     if args.show and args.watch:
