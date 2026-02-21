@@ -993,7 +993,7 @@ def main():
     parser = argparse.ArgumentParser(
         prog="calced",
         description="A notepad calculator that evaluates expressions in text files. Updates the input file in-place with results.",
-        epilog="examples:\n  calced expenses.txt        evaluate and update file in-place\n  calced -s expenses.txt     print results to stdout\n  calced -w expenses.txt     watch file and re-evaluate on changes\n\nhttps://github.com/karlb/calced",
+        epilog="examples:\n  calced expenses.txt        evaluate and update file in-place\n  calced -s expenses.txt     print results to stdout\n  calced -w expenses.txt     watch file and re-evaluate on changes\n\ndocs & issues: https://github.com/karlb/calced",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {_get_version()}")
