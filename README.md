@@ -29,14 +29,17 @@ calced -u <file>        # print shareable web URL
 
 ### Installation
 
-Requires Python 3.9+.
+Requires Python 3.9+. Any typical Python install method works (`pip install calced`, etc.).
 
 ```sh
-# With uv (recommended)
-uv tool install ./python
+# Install as a CLI tool
+uv tool install calced
 
-# Or just run the script directly
-python python/calced.py <file>
+# Or run without installing
+uvx calced <file>
+
+# Or just grab the single-file script and run it directly
+python calced.py <file>
 ```
 
 ## How it works
