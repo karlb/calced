@@ -728,10 +728,13 @@ def format_result(n, fmt_opts=None):
     return str(n)
 
 
-def process_file(filepath, show=False, no_color=False):
+def process_file(filepath, show=False, no_color=False, stdin_content=None):
     """Read, evaluate, and write back the file with results (or print to stdout)."""
-    with open(filepath, "r") as f:
-        original = f.read()
+    if stdin_content is not None:
+        original = stdin_content
+    else:
+        with open(filepath, "r") as f:
+            original = f.read()
 
     use_color = (
         show
@@ -915,6 +918,11 @@ def main():
         help="disable colored output",
     )
     args = parser.parse_args()
+
+    if args.file == "-":
+        content = sys.stdin.read()
+        process_file(None, show=True, no_color=args.no_color, stdin_content=content)
+        return
 
     if not os.path.exists(args.file):
         print(f"Error: {args.file} not found", file=sys.stderr)
