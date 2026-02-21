@@ -728,13 +728,14 @@ def format_result(n, fmt_opts=None):
     return str(n)
 
 
-def process_file(filepath, show=False):
+def process_file(filepath, show=False, no_color=False):
     """Read, evaluate, and write back the file with results (or print to stdout)."""
     with open(filepath, "r") as f:
         original = f.read()
 
     use_color = (
         show
+        and not no_color
         and sys.stdout.isatty()
         and not os.environ.get("NO_COLOR", "")
         and os.environ.get("TERM") != "dumb"
@@ -847,7 +848,7 @@ def process_file(filepath, show=False):
     return False
 
 
-def watch_file(filepath, show=False, interval=0.5):
+def watch_file(filepath, show=False, no_color=False, interval=0.5):
     """Watch file for changes and re-process."""
     last_mtime = os.path.getmtime(filepath)
     print(f"Watching {filepath} for changes... (Ctrl+C to stop)", file=sys.stderr)
@@ -859,7 +860,7 @@ def watch_file(filepath, show=False, interval=0.5):
                     if show:
                         sys.stderr.write("\033[2J\033[H")
                         sys.stderr.flush()
-                    if process_file(filepath, show=show):
+                    if process_file(filepath, show=show, no_color=no_color):
                         if not show:
                             print(f"  Updated results.")
                     last_mtime = os.path.getmtime(filepath)
@@ -907,6 +908,11 @@ def main():
         action="store_true",
         help="print URL for the web version of the file",
     )
+    parser.add_argument(
+        "--no-color",
+        action="store_true",
+        help="disable colored output",
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.file):
@@ -926,10 +932,10 @@ def main():
     if args.show and args.watch:
         sys.stderr.write("\033[2J\033[H")
         sys.stderr.flush()
-    process_file(args.file, show=args.show)
+    process_file(args.file, show=args.show, no_color=args.no_color)
 
     if args.watch:
-        watch_file(args.file, show=args.show)
+        watch_file(args.file, show=args.show, no_color=args.no_color)
 
 
 if __name__ == "__main__":
