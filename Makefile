@@ -1,4 +1,4 @@
-.PHONY: README.md deploy-web build-pypi
+.PHONY: README.md deploy-web build-pypi release
 README.md:
 	uvx --from cogapp cog -r README.md
 
@@ -37,3 +37,22 @@ build-pypi:
 
 release-python: build-pypi
 	uv publish python/dist/*
+
+release: test README.md
+	@set -e; \
+	if [ -n "$$(git status --porcelain)" ]; then \
+		echo "Error: working directory is dirty. Commit changes first."; \
+		exit 1; \
+	fi; \
+	VERSION=$$(grep '^version' python/pyproject.toml | sed 's/.*"\(.*\)".*/\1/'); \
+	TAG="v$$VERSION"; \
+	if git rev-parse "$$TAG" >/dev/null 2>&1; then \
+		echo "Error: tag $$TAG already exists. Bump version in python/pyproject.toml."; \
+		exit 1; \
+	fi; \
+	echo "Releasing $$TAG..."; \
+	git tag "$$TAG"; \
+	$(MAKE) release-python; \
+	$(MAKE) deploy-web; \
+	git push origin master "$$TAG"; \
+	echo "Released $$TAG"
