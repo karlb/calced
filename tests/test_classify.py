@@ -4,6 +4,7 @@
 import json
 import os
 import sys
+import unittest
 
 here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(here, "..", "python"))
@@ -12,18 +13,14 @@ from calced import classify_line
 with open(os.path.join(here, "classify_vectors.json")) as f:
     vectors = json.load(f)
 
-failures = 0
-for i, v in enumerate(vectors):
-    result = classify_line(v["text"], v["variables"])
-    expected = v["expected"]
-    if result != expected:
-        print(f"FAIL vector {i}: {v['text']!r}")
-        print(f"  expected: {expected}")
-        print(f"  got:      {result}")
-        failures += 1
 
-if failures:
-    print(f"\n{failures}/{len(vectors)} vectors failed")
-    exit(1)
-else:
-    print(f"All {len(vectors)} vectors passed")
+class TestClassify(unittest.TestCase):
+    def test_vectors(self):
+        for i, v in enumerate(vectors):
+            with self.subTest(i=i, text=v["text"]):
+                result = classify_line(v["text"], v["variables"])
+                self.assertEqual(result, v["expected"])
+
+
+if __name__ == "__main__":
+    unittest.main()

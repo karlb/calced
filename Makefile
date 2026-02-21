@@ -9,7 +9,7 @@ test-py:
 	python3 tests/test_evaluate.py
 	python3 tests/test_cli.py
 	@for f in tests/*.md; do python/calced.py "$$f"; done
-	git diff --exit-code -- tests
+	git diff --exit-code -- tests/*.md
 
 test-js:
 	node web/test.mjs
