@@ -26,6 +26,7 @@ deploy-web:
 	fi; \
 	mkdir -p "$$TMPDIR/$$MAJOR"; \
 	cp web/index.html "$$TMPDIR/$$MAJOR/index.html"; \
+	cp web/og.png "$$TMPDIR/og.png"; \
 	printf '<!DOCTYPE html>\n<html>\n<head><meta http-equiv="refresh" content="0;url=./'"$$MAJOR"'/"></head>\n<body></body>\n</html>\n' > "$$TMPDIR/index.html"; \
 	touch "$$TMPDIR/.nojekyll"; \
 	cd "$$TMPDIR" && git add -A && git commit -m "Deploy web app v$$VERSION" && git push origin gh-pages
