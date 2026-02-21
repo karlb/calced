@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.svg" alt="calced logo" width="128">
+</p>
+
 # calced
 
 A notepad calculator that evaluates math expressions in plain text files. Available as a **CLI tool** and a **web app**.

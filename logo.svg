@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#2563eb"/>
+  <!-- Expression bars (dim) -->
+  <rect x="11" y="18" width="20" height="5" rx="2.5" fill="white" opacity=".4"/>
+  <rect x="11" y="30" width="14" height="5" rx="2.5" fill="white" opacity=".4"/>
+  <rect x="11" y="42" width="22" height="5" rx="2.5" fill="white" opacity=".4"/>
+  <!-- Result bars (bright, right-aligned) -->
+  <rect x="39" y="18" width="14" height="5" rx="2.5" fill="white"/>
+  <rect x="43" y="30" width="10" height="5" rx="2.5" fill="white"/>
+  <rect x="37" y="42" width="16" height="5" rx="2.5" fill="white"/>
+</svg>
