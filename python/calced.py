@@ -865,11 +865,25 @@ def watch_file(filepath, show=False, interval=0.5):
         print("\nStopped.", file=sys.stderr)
 
 
+def _get_version():
+    """Get version from package metadata or pyproject.toml fallback."""
+    try:
+        return importlib.metadata.version("calced")
+    except importlib.metadata.PackageNotFoundError:
+        toml_path = os.path.join(os.path.dirname(__file__), "pyproject.toml")
+        with open(toml_path) as f:
+            for line in f:
+                if line.startswith("version"):
+                    return line.split('"')[1]
+        return "0"
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="calced",
         description="A notepad calculator that evaluates expressions in text files. Updates the input file in-place with results.",
     )
+    parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {_get_version()}")
     parser.add_argument("file", help="path to input file")
     parser.add_argument(
         "-w", "--watch", action="store_true", help="watch for changes and auto-update"
@@ -898,18 +912,7 @@ def main():
         compressed = zlib.compress(content.encode(), wbits=-15)
         encoded = base64.b64encode(compressed).decode()
         encoded = encoded.replace("+", "-").replace("/", "_").rstrip("=")
-        try:
-            version = importlib.metadata.version("calced")
-        except importlib.metadata.PackageNotFoundError:
-            # Fallback: read version from pyproject.toml when not installed
-            toml_path = os.path.join(os.path.dirname(__file__), "pyproject.toml")
-            version = "0"
-            with open(toml_path) as f:
-                for line in f:
-                    if line.startswith("version"):
-                        version = line.split('"')[1]
-                        break
-        major = version.split(".")[0]
+        major = _get_version().split(".")[0]
         print(f"https://calced.karl.berlin/{major}/#{encoded}")
         return
 
