@@ -1,6 +1,17 @@
 # calced
 
-A notepad calculator that evaluates math expressions in plain text files. Available as a **CLI tool** and a **web app** — both use the same syntax and are validated against the same test suite.
+A notepad calculator that evaluates math expressions in plain text files. Available as a **CLI tool** and a **web app**.
+
+## Why calced?
+
+Spreadsheets are overkill for quick calculations. REPLs lose context once you close them. calced keeps your math in plain text files where results stay next to the expressions, files can be versioned and diffed, and you use whatever editor you want.
+
+Compared to other notepad calculators:
+
+- **Tiny, no dependencies** — the CLI is a single 28KB Python file (stdlib only), the web app is a single 25KB HTML file. No build step, no node_modules, no Electron.
+- **Works offline** — both versions run entirely locally. Save the HTML file or install the CLI and you're set.
+- **Both CLI and web** — same syntax, same test suite, but well adapted to each environment.
+- **Stable results** — files store results inline so they're always visible. Shared web URLs include the major version, so they won't break on updates.
 
 ## Web
 
