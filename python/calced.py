@@ -869,6 +869,7 @@ def watch_file(filepath, show=False, no_color=False, interval=0.5):
             time.sleep(interval)
     except KeyboardInterrupt:
         print("\nStopped.", file=sys.stderr)
+        sys.exit(130)
 
 
 def _get_version():
