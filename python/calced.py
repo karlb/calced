@@ -342,7 +342,9 @@ def tokenize(text):
 
 DIM = "\033[2m"
 BOLD = "\033[1m"
+RED = "\033[31m"
 GREEN = "\033[32m"
+CYAN = "\033[36m"
 RESET = "\033[0m"
 
 
@@ -848,13 +850,32 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
         return new_content != original
     if dry_run:
         if new_content != original:
-            diff = difflib.unified_diff(
+            diff = list(difflib.unified_diff(
                 original.splitlines(keepends=True),
                 new_content.splitlines(keepends=True),
                 fromfile=filepath,
                 tofile=filepath,
+            ))
+            color_diff = (
+                not no_color
+                and sys.stdout.isatty()
+                and not os.environ.get("NO_COLOR", "")
+                and os.environ.get("TERM") != "dumb"
             )
-            sys.stdout.writelines(diff)
+            if color_diff:
+                for line in diff:
+                    if line.startswith("---") or line.startswith("+++"):
+                        sys.stdout.write(BOLD + line + RESET)
+                    elif line.startswith("@@"):
+                        sys.stdout.write(CYAN + line + RESET)
+                    elif line.startswith("-"):
+                        sys.stdout.write(RED + line + RESET)
+                    elif line.startswith("+"):
+                        sys.stdout.write(GREEN + line + RESET)
+                    else:
+                        sys.stdout.write(line)
+            else:
+                sys.stdout.writelines(diff)
             return True
         return False
     if new_content != original:
