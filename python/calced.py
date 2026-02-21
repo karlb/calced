@@ -2,11 +2,14 @@
 """calced - a notepad calculator that updates files with results."""
 
 import argparse
+import base64
+import importlib.metadata
 import math
 import os
 import re
 import sys
 import time
+import zlib
 
 RESULT_RE = re.compile(r"\s{2,}# => .*$")
 DIRECTIVE_RE = re.compile(r"^@(format|separator)\s*=\s*(.+)$", re.IGNORECASE)
@@ -877,11 +880,38 @@ def main():
         action="store_true",
         help="print result to stdout instead of updating the file",
     )
+    parser.add_argument(
+        "-u",
+        "--url",
+        action="store_true",
+        help="print URL for the web version of the file",
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.file):
         print(f"Error: {args.file} not found", file=sys.stderr)
         sys.exit(1)
+
+    if args.url:
+        content = open(args.file).read()
+        content = re.sub(r"\s{2,}# => .*$", "", content, flags=re.MULTILINE)
+        compressed = zlib.compress(content.encode(), wbits=-15)
+        encoded = base64.b64encode(compressed).decode()
+        encoded = encoded.replace("+", "-").replace("/", "_").rstrip("=")
+        try:
+            version = importlib.metadata.version("calced")
+        except importlib.metadata.PackageNotFoundError:
+            # Fallback: read version from pyproject.toml when not installed
+            toml_path = os.path.join(os.path.dirname(__file__), "pyproject.toml")
+            version = "0"
+            with open(toml_path) as f:
+                for line in f:
+                    if line.startswith("version"):
+                        version = line.split('"')[1]
+                        break
+        major = version.split(".")[0]
+        print(f"https://calced.karl.berlin/{major}/#{encoded}")
+        return
 
     if args.show and args.watch:
         sys.stderr.write("\033[2J\033[H")
