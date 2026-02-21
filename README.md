@@ -44,8 +44,14 @@ def run_calced(text):
         ['python', 'python/calced.py', '-s', fname],
         capture_output=True, text=True, env=env
     )
+    url_result = subprocess.run(
+        ['python', 'python/calced.py', '--url', fname],
+        capture_output=True, text=True, env=env
+    )
     os.unlink(fname)
+    url = url_result.stdout.strip()
     cog.out('```\n' + result.stdout + '```\n')
+    cog.out(f'<sub>[Try in web app]({url})</sub>\n')
 
 run_calced("""
 rent 1500
@@ -60,6 +66,7 @@ groceries 200 + 150                     # => 350
 utilities 80 + 45 + 30                  # => 155
 total                                   # => 2_005
 ```
+<sub>[Try in web app](https://calced.karl.berlin/0/#K0rNK1EwNDUw4Eovyk9OLcpMLVYwMjBQ0AYJcpWWZOZkloDELEBCJqZAwtiAqyS_JDGHCwA)</sub>
 <!-- [[[end]]] -->
 
 Results are aligned and updated in place each time you run the CLI (or automatically in watch mode), or live as you type in the web app.
@@ -82,6 +89,7 @@ run_calced("""
 2 ^ 10                                  # => 1_024
 17 % 5                                  # => 2
 ```
+<sub>[Try in web app](https://calced.karl.berlin/0/#M1LQVjDmMjRQ0FLQMAGyzTS5jBTiFAwNuAzNFVQVTLkA)</sub>
 <!-- [[[end]]] -->
 
 ### Variables
@@ -100,6 +108,7 @@ tax_rate = 22%                          # => 0.22
 tax = income * tax_rate                 # => 1_100
 after_tax = income - tax                # => 3_900
 ```
+<sub>[Try in web app](https://calced.karl.berlin/0/#y8xLzs9NVbBVMDUwMOAqSayIL0osAfGNjFRBXCArE6JESwEmy5WYVpJaFI8iqwuS5QIA)</sub>
 <!-- [[[end]]] -->
 
 ### Percentages
@@ -116,6 +125,7 @@ run_calced("""
 200 + 15%                               # => 230
 200 - 10%                               # => 180
 ```
+<sub>[Try in web app](https://calced.karl.berlin/0/#MzVQVchPUzA2MOAyMjBQ0FYwNFUFs3QVDA1UuQA)</sub>
 <!-- [[[end]]] -->
 
 ### SI prefixes
@@ -134,6 +144,7 @@ run_calced("""
 1.5G                                    # => 1_500_000_000
 500n * 2                                # => 0.000001
 ```
+<sub>[Try in web app](https://calced.karl.berlin/0/#M8zmMvTlMtQzdecyNTDIU9BSMOICAA)</sub>
 <!-- [[[end]]] -->
 
 Supported: `k`/`K` (kilo), `M` (mega), `G` (giga), `T` (tera), `P` (peta), `E` (exa), `m` (milli), `u`/`μ` (micro), `n` (nano), `p` (pico), `f` (femto), and more.
@@ -156,6 +167,7 @@ run_calced("""
 60 min in hr                            # => 1
 1 gal in l                              # => 3.79
 ```
+<sub>[Try in web app](https://calced.karl.berlin/0/#M1XIzlXIzFPIzcxJLeYyNDBQcAZx3bgMFdIzkyAySVxmBkAqD8TLKALJJOaA2DlcAA)</sub>
 <!-- [[[end]]] -->
 
 Supported dimensions: length, mass, temperature, data, time, volume. Use `in` or `to`.
@@ -180,6 +192,7 @@ max(1, 9, 3)                            # => 9
 log10(1000)                             # => 3
 sin(0)                                  # => 0
 ```
+<sub>[Try in web app](https://calced.karl.berlin/0/#Ky4sKtEwNNPkKsovzUvRMNYzNDE0tdRRMNLkys3M0zAFsnQULICcxAoNQx0FoIyxJldOfrqhgYahgYGBJlcxUBWQAgA)</sub>
 <!-- [[[end]]] -->
 
 Available: `sqrt`, `abs`, `floor`, `ceil`, `round`, `log`, `log2`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `exp`, `min`, `max`
@@ -196,6 +209,7 @@ e ^ 1
 pi * 2                                  # => 6.28
 e ^ 1                                   # => 2.72
 ```
+<sub>[Try in web app](https://calced.karl.berlin/0/#K8hU0FIw4kpViFMw5AIA)</sub>
 <!-- [[[end]]] -->
 
 ### Totals
@@ -216,6 +230,7 @@ groceries 350                           # => 350
 utilities 155                           # => 155
 total                                   # => 2_005
 ```
+<sub>[Try in web app](https://calced.karl.berlin/0/#K0rNK1EwNDUw4Eovyk9OLcpMLVYwNjXgKi3JzMksAfEMTU25SvJLEnO4AA)</sub>
 <!-- [[[end]]] -->
 
 Blank lines are ignored in the total; headings reset it.
@@ -236,6 +251,7 @@ celo_price = 0.08 (see http://coinmarketcap.com)
 ```
 celo_price = 0.08 (see http://coinmarketcap.com)  # => 0.08
 ```
+<sub>[Try in web app](https://calced.karl.berlin/0/#S07NyY8vKMpMTlWwVTDQM7BQ0ChOTVXIKCkpsNLXT87PzMtNLMpOLUlOLNBLzs_V5AIA)</sub>
 <!-- [[[end]]] -->
 
 ## Format directives
@@ -264,4 +280,5 @@ run_calced("""
 @format = minSig(3)
 1000000                                 # => 1,000,000
 ```
+<sub>[Try in web app](https://calced.karl.berlin/0/#MzQAAy6HtPyi3MQSBVuFtMyK1BQNI00uQwyp4uTM1LySzLTMZIRkcWpBYlFiSX4RUD45Pzc3EUl9bmZecGa6hjHCLAA)</sub>
 <!-- [[[end]]] -->
