@@ -4,7 +4,7 @@ A notepad calculator that evaluates math expressions in plain text files. Availa
 
 ## Web
 
-Open the web app in a browser — no install required.
+[Open the web app](https://calced.karl.berlin) in a browser — no install required.
 
 ## CLI
 
@@ -13,6 +13,7 @@ calced <file>           # evaluate and update file in place
 calced -s <file>        # print result to stdout (don't modify file)
 calced -w <file>        # watch for changes and auto-update
 calced -w -s <file>     # watch and print (clears screen on change)
+calced -u <file>        # print shareable web URL
 ```
 
 ### Installation
@@ -254,7 +255,7 @@ celo_price = 0.08 (see http://coinmarketcap.com)  # => 0.08
 <sub>[Try in web app](https://calced.karl.berlin/0/#S07NyY8vKMpMTlWwVTDQM7BQ0ChOTVXIKCkpsNLXT87PzMtNLMpOLUlOLNBLzs_V5AIA)</sub>
 <!-- [[[end]]] -->
 
-## Format directives
+### Format directives
 
 Control output formatting with `@format` and `@separator` directives. These apply to all subsequent lines until changed.
 
