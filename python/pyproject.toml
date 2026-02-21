@@ -23,7 +23,7 @@ classifiers = [
 calced = "calced:main"
 
 [project.urls]
-Homepage = "https://karlb.github.io/calced/"
+Homepage = "https://calced.karl.berlin"
 Repository = "https://github.com/karlb/calced"
 Issues = "https://github.com/karlb/calced/issues"
 
