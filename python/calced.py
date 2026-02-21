@@ -868,9 +868,9 @@ def watch_file(filepath, show=False, interval=0.5):
 def main():
     parser = argparse.ArgumentParser(
         prog="calced",
-        description="A notepad calculator that evaluates expressions in text files.",
+        description="A notepad calculator that evaluates expressions in text files. Updates the input file in-place with results.",
     )
-    parser.add_argument("file", help="path to .md file")
+    parser.add_argument("file", help="path to input file")
     parser.add_argument(
         "-w", "--watch", action="store_true", help="watch for changes and auto-update"
     )
