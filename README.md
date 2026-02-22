@@ -12,7 +12,7 @@ Spreadsheets are overkill for quick calculations. REPLs lose context once you cl
 
 Compared to other notepad calculators:
 
-- **Tiny, no dependencies** — the CLI is a single 33KB Python file (stdlib only), the web app is a single 26KB HTML file. No build step, no node_modules, no Electron.
+- **Tiny, no dependencies** — the CLI is a single 35KB Python file (stdlib only), the web app is a single 34KB HTML file. No build step, no node_modules, no Electron.
 - **Works offline** — both versions run entirely locally. Save the HTML file or install the CLI and you're set.
 - **Both CLI and web** — same syntax, same test suite, but well adapted to each environment.
 - **Stable results** — files store results inline so they're always visible. Shared web URLs include the major version, so they won't break on updates.
@@ -180,11 +180,11 @@ run_calced("""
 """)
 ]]] -->
 ```
-5 km in miles                           # => 3.11
+5 km in miles                           # => 3.106855961
 100 C in F                              # => 212
 1 gib in mib                            # => 1_024
 60 min in hr                            # => 1
-1 gal in l                              # => 3.79
+1 gal in l                              # => 3.78541
 ```
 <sub>[Try in web app](https://calced.karl.berlin/0/#M1XIzlXIzFPIzcxJLeYyNDBQcAZx3bgMFdIzkyAySVxmBkAqD8TLKALJJOaA2DlcAA)</sub>
 <!-- [[[end]]] -->
@@ -225,8 +225,8 @@ e ^ 1
 """)
 ]]] -->
 ```
-pi * 2                                  # => 6.28
-e ^ 1                                   # => 2.72
+pi * 2                                  # => 6.283185307
+e ^ 1                                   # => 2.718281828
 ```
 <sub>[Try in web app](https://calced.karl.berlin/0/#K8hU0FIw4kpViFMw5AIA)</sub>
 <!-- [[[end]]] -->

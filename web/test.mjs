@@ -15,7 +15,7 @@ const testsDir = join(__dirname, "..", "tests");
 
 // Extract JS engine from index.html between markers
 const html = readFileSync(htmlPath, "utf-8");
-const startMarker = "// --- SI Prefixes ---";
+const startMarker = "// -- CALCED ENGINE BEGIN --";
 const endMarker = "// END CALCED ENGINE";
 const startIdx = html.indexOf(startMarker);
 const endIdx = html.indexOf(endMarker);
@@ -50,10 +50,11 @@ const evaluateVectors = JSON.parse(readFileSync(join(testsDir, "evaluate_vectors
 for (let i = 0; i < evaluateVectors.length; i++) {
   const v = evaluateVectors[i];
   const [result] = evaluateLine(v.text, v.variables);
-  if (result !== v.expected) {
+  const resultVal = result !== null && result !== "TOTAL" ? result.toNumber() : result;
+  if (resultVal !== v.expected) {
     console.error(`FAIL evaluate vector ${i}: ${JSON.stringify(v.text)}`);
     console.error(`  expected: ${JSON.stringify(v.expected)}`);
-    console.error(`  got:      ${JSON.stringify(result)}`);
+    console.error(`  got:      ${JSON.stringify(resultVal)}`);
     unitFailures++;
   }
 }
