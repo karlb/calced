@@ -15,11 +15,11 @@ Compared to other notepad calculators:
 - **Tiny, no dependencies** — the CLI is a single 35KB Python file (stdlib only), the web app is a single 34KB HTML file. No build step, no node_modules, no Electron.
 - **Works offline** — both versions run entirely locally. Save the HTML file or install the CLI and you're set.
 - **Both CLI and web** — same syntax, same test suite, but well adapted to each environment.
-- **Stable results** — files store results inline so they're always visible. Shared web URLs include the major version, so they won't break on updates.
+- **Stable results** — shared web URLs include the major version, so they won't break on updates. Files store results inline. All configuration is inside the documents.
 
 ## Web
 
-[Open the web app](https://calced.karl.berlin) in a browser — no install required.
+[Open the web app](https://calced.karl.berlin) in a browser.
 
 ## CLI
 

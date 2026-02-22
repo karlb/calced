@@ -1,4 +1,4 @@
-.PHONY: README.md deploy-web build-pypi release
+.PHONY: README.md deploy-web build-pypi release test-property
 README.md:
 	uvx --from cogapp cog -r README.md
 
@@ -8,6 +8,9 @@ test-py:
 	python3 -m unittest discover -s tests
 	@for f in tests/*.md; do python/calced.py "$$f"; done
 	git diff --exit-code -- tests/*.md
+
+test-property:
+	uv run --with hypothesis --with pytest pytest tests/test_properties.py -v
 
 test-js:
 	node web/test.mjs

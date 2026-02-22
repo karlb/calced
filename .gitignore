@@ -1,5 +1,6 @@
 __pycache__/
 *.pyc
+.hypothesis/
 python/README.md
 python/LICENSE
 # No dependencies to pin, so lock file adds no value
