@@ -12,7 +12,7 @@ Spreadsheets are overkill for quick calculations. REPLs lose context once you cl
 
 Compared to other notepad calculators:
 
-- **Tiny, no dependencies** — the CLI is a single 35KB Python file (stdlib only), the web app is a single 34KB HTML file. No build step, no node_modules, no Electron.
+- **Tiny, no dependencies** — the CLI is a single 46KB Python file (stdlib only), the web app is a single 51KB HTML file. No build step, no node_modules, no Electron.
 - **Works offline** — both versions run entirely locally. Save the HTML file or install the CLI and you're set.
 - **Both CLI and web** — same syntax, same test suite, but well adapted to each environment.
 - **Stable results** — shared web URLs include the major version, so they won't break on updates. Files store results inline. All configuration is inside the documents.
@@ -191,6 +191,25 @@ run_calced("""
 
 Supported dimensions: length, mass, temperature, data, time, volume. Use `in` or `to`.
 
+### Rate conversions
+
+Define exchange rates (or any conversion rate) with `@rate`, then convert using `in`.
+
+<!-- [[[cog
+run_calced("""
+@rate USD/EUR = 0.92
+100 USD in EUR
+50 EUR in USD
+""")
+]]] -->
+```
+@rate USD/EUR = 0.92
+100 USD in EUR                          # => 92
+50 EUR in USD                           # => 54.34782609
+```
+<sub>[Try in web app](https://calced.karl.berlin/0/#cyhKLElVCA120XcNDVKwVTDQszTiMjQwAAkpZOYpAEW5TA1AFIgHFOQCAA)</sub>
+<!-- [[[end]]] -->
+
 ### Functions
 
 <!-- [[[cog
@@ -230,6 +249,25 @@ e ^ 1                                   # => 2.718281828
 ```
 <sub>[Try in web app](https://calced.karl.berlin/0/#K8hU0FIw4kpViFMw5AIA)</sub>
 <!-- [[[end]]] -->
+
+### Date arithmetic
+
+<!-- [[[cog
+run_calced("""
+2025-01-15 + 3 days
+2025-01-31 + 1 month
+2025-03-01 - 2025-01-01
+""")
+]]] -->
+```
+2025-01-15 + 3 days                     # => 2025-01-18
+2025-01-31 + 1 month                    # => 2025-02-28
+2025-03-01 - 2025-01-01                 # => 59
+```
+<sub>[Try in web app](https://calced.karl.berlin/0/#MzIwMtU1MNQ1NFXQVjBWSEmsLOYygooZGwLFDBVy8_NKMqCCxkBxBV0FmAoDQy4A)</sub>
+<!-- [[[end]]] -->
+
+Supports `days`, `weeks`, `months`, `years`. Subtracting two dates returns the difference in days. `today`, `tomorrow`, and `yesterday` work as keywords.
 
 ### Totals
 
