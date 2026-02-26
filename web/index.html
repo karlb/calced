@@ -151,6 +151,12 @@ header div { display: flex; gap: 8px; }
       <div class="cs-ex">min(5, 2, 8)</div>
     </div>
     <div>
+      <div class="cs-head">Rates <a class="cs-try" onclick="tryExample('rates')">Try</a></div>
+      <div class="cs-ex">@rate USD/EUR = 0.92</div>
+      <div class="cs-ex">100 USD in EUR</div>
+      <div class="cs-ex">50 EUR in USD</div>
+    </div>
+    <div>
       <div class="cs-head">Formatting <a class="cs-try" onclick="tryExample('fmt')">Try</a></div>
       <div class="cs-ex">1.5k + 500</div>
       <div class="cs-ex">@format = fixed(2)</div>
@@ -425,7 +431,7 @@ class Parser {
   }
 }
 
-function _detectConversion(tokens) {
+function _detectConversion(tokens, rates) {
   const eofIdx = tokens.length - 1;
   if (eofIdx >= 4) {
     const tFr = tokens[eofIdx - 3];
@@ -440,6 +446,12 @@ function _detectConversion(tokens) {
         const [frDim, frFactor] = UNIT_LOOKUP[frName];
         const [toDim, toFactor] = UNIT_LOOKUP[toName];
         if (frDim === toDim) return [[frDim, frFactor, toFactor], eofIdx - 3];
+      }
+      if (rates) {
+        const pair = frName + "/" + toName;
+        const rev = toName + "/" + frName;
+        if (pair in rates) return [["rate", rates[pair], new Big(1)], eofIdx - 3];
+        if (rev in rates) return [["rate", new Big(1), rates[rev]], eofIdx - 3];
       }
     }
   }
@@ -494,7 +506,7 @@ function _tryParse(mathTokens) {
   }
 }
 
-function evaluateLine(text, variables) {
+function evaluateLine(text, variables, rates) {
   const tokens = tokenize(text);
   if (tokens.some(t => t[0] === "TOTAL")) return ["TOTAL", variables];
   const allVars = Object.create(null);
@@ -510,7 +522,7 @@ function evaluateLine(text, variables) {
     varName = tokens[0][1].toLowerCase();
     pos = 2;
   }
-  const [conversion, convStart] = _detectConversion(tokens);
+  const [conversion, convStart] = _detectConversion(tokens, rates);
   const eofIdx = tokens.length - 1;
   const [mathTokens] = _buildMath(tokens, pos, convStart, eofIdx, allVars);
   let [result] = _tryParse(mathTokens);
@@ -576,12 +588,14 @@ function formatResult(n, fmtOpts) {
 
 const DIRECTIVE_RE = /^@(format|separator)\s*=\s*(.+)$/i;
 const FORMAT_RE = /^(minSig|fixed|scientific|auto)(?:\((\d+)\))?$/i;
+const RATE_RE = /^@rate\s+(\w+)\/(\w+)\s*=\s*(.+)$/i;
 
-function classifyLine(text, variables) {
+function classifyLine(text, variables, rates) {
   const stripped = text.trim();
   if (!stripped) return "blank";
   if (stripped.startsWith("#")) return "comment";
   if (DIRECTIVE_RE.test(stripped)) return "directive";
+  if (RATE_RE.test(stripped)) return "directive";
 
   const tokens = tokenize(text);
   const allNames = new Set();
@@ -610,7 +624,7 @@ function classifyLine(text, variables) {
         mathStart = 2;
       }
 
-      const [conversion, convStart] = _detectConversion(tokens);
+      const [conversion, convStart] = _detectConversion(tokens, rates);
       const eofIdx = tokens.length - 1;
       if (conversion !== null) {
         active.add(convStart);
@@ -671,13 +685,23 @@ const RESULT_RE = /\s{2,}# => .*$/;
 function processText(text) {
   const lines = text.split("\n");
   let variables = Object.create(null);
+  const rates = Object.create(null);
   let resultsAcc = [];
   let fmtOpts = { mode: "minSig", precision: 10, separator: "underscore" };
   const output = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const stripped = line.trim();
-    const cls = classifyLine(line, variables);
+    const rm = stripped.match(RATE_RE);
+    if (rm) {
+      const cls = classifyLine(line, variables, rates);
+      const fr = rm[1].toLowerCase();
+      const to = rm[2].toLowerCase();
+      rates[fr + "/" + to] = new Big(rm[3].trim());
+      output.push({ result: null, cls });
+      continue;
+    }
+    const cls = classifyLine(line, variables, rates);
     const dm = stripped.match(DIRECTIVE_RE);
     if (dm) {
       const key = dm[1].toLowerCase();
@@ -707,7 +731,7 @@ function processText(text) {
       output.push({ result: null, cls });
       continue;
     }
-    const [result, newVars] = evaluateLine(stripped, variables);
+    const [result, newVars] = evaluateLine(stripped, variables, rates);
     variables = newVars;
     if (result === "TOTAL") {
       const total = resultsAcc.reduce((s, r) => r !== null ? s.plus(r) : s, new Big(0));
@@ -743,6 +767,7 @@ const EXAMPLES = {
   units: "5 km in miles\n100 C in F\n1 gib in mib\n60 min in hr\n1 gal in l",
   funcs: "sqrt(16)\nround(3.14159, 2)\nmin(5, 2, 8)\nmax(1, 9, 3)\nlog10(1000)",
   fmt: "1000000\n\n@format = fixed(2)\n1000000\n\n@format = scientific\n1000000\n\n@separator = comma\n@format = minSig(3)\n1000000",
+  rates: "@rate USD/EUR = 0.92\n100 USD in EUR\n50 EUR in USD\n\n@rate BTC/USD = 97500\n0.5 BTC in USD",
 };
 
 function toggleDocs() {

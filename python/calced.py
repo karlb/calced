@@ -17,6 +17,7 @@ import zlib
 RESULT_RE = re.compile(r"\s{2,}# => .*$")
 DIRECTIVE_RE = re.compile(r"^@(format|separator)\s*=\s*(.+)$", re.IGNORECASE)
 FORMAT_RE = re.compile(r"^(minSig|fixed|scientific|auto)(?:\((\d+)\))?$", re.IGNORECASE)
+RATE_RE = re.compile(r"^@rate\s+(\w+)/(\w+)\s*=\s*(.+)$", re.IGNORECASE)
 
 # SI prefixes (case-sensitive: M=mega, m=milli)
 SI_PREFIX = {
@@ -359,7 +360,7 @@ CYAN = "\033[36m"
 RESET = "\033[0m"
 
 
-def classify_line(text, variables):
+def classify_line(text, variables, rates=None):
     """Classify tokens in a line for syntax highlighting.
 
     Returns "blank", "comment", "directive", or list of [start, end, dim] tuples.
@@ -370,6 +371,8 @@ def classify_line(text, variables):
     if stripped.startswith("#"):
         return "comment"
     if DIRECTIVE_RE.match(stripped):
+        return "directive"
+    if RATE_RE.match(stripped):
         return "directive"
 
     tokens = tokenize(text)
@@ -396,7 +399,7 @@ def classify_line(text, variables):
                 active.add(1)
                 math_start = 2
 
-            conversion, conv_start = _detect_conversion(tokens)
+            conversion, conv_start = _detect_conversion(tokens, rates=rates)
             eof_idx = len(tokens) - 1
             if conversion is not None:
                 active.update({conv_start, conv_start + 1, conv_start + 2})
@@ -430,9 +433,9 @@ def classify_line(text, variables):
     return spans
 
 
-def colorize_expr(text, variables):
+def colorize_expr(text, variables, rates=None):
     """Return text with dim escapes around ignored (non-math) words."""
-    cls = classify_line(text, variables)
+    cls = classify_line(text, variables, rates=rates)
     if isinstance(cls, str):
         return text
     parts = []
@@ -445,11 +448,11 @@ def colorize_expr(text, variables):
     return "".join(parts)
 
 
-def colorize_line(line, result, fmt_result_str, align, variables):
+def colorize_line(line, result, fmt_result_str, align, variables, rates=None):
     """Return a colorized version of an output line."""
     stripped = line.strip()
     if result is not None:
-        colored_expr = colorize_expr(stripped, variables)
+        colored_expr = colorize_expr(stripped, variables, rates=rates)
         # Reconstruct with leading whitespace preserved
         leading = line[: len(line) - len(line.lstrip())]
         pad = max(align - len(line.rstrip()), 2)
@@ -466,7 +469,7 @@ def colorize_line(line, result, fmt_result_str, align, variables):
         )
     if stripped.startswith("#"):
         return BOLD + line + RESET
-    if DIRECTIVE_RE.match(stripped):
+    if DIRECTIVE_RE.match(stripped) or RATE_RE.match(stripped):
         return DIM + line + RESET
     return line
 
@@ -579,7 +582,7 @@ class Parser:
         raise ParseError(f"Unexpected: {t}")
 
 
-def _detect_conversion(tokens):
+def _detect_conversion(tokens, rates=None):
     """Detect unit conversion suffix: ... <from_unit> in|to <to_unit> EOF."""
     eof_idx = len(tokens) - 1
     if eof_idx >= 4:
@@ -599,6 +602,13 @@ def _detect_conversion(tokens):
                 to_dim, to_factor = UNIT_LOOKUP[to_name]
                 if fr_dim == to_dim:
                     return (fr_dim, fr_factor, to_factor), eof_idx - 3
+            if rates:
+                pair = (fr_name, to_name)
+                rev = (to_name, fr_name)
+                if pair in rates:
+                    return ("rate", rates[pair], Decimal(1)), eof_idx - 3
+                elif rev in rates:
+                    return ("rate", Decimal(1), rates[rev]), eof_idx - 3
     return None, eof_idx
 
 
@@ -663,7 +673,7 @@ def _try_parse(math_tokens):
         return None, -1
 
 
-def evaluate_line(text, variables):
+def evaluate_line(text, variables, rates=None):
     """Evaluate a line. Returns (result, variables) or (None, variables)."""
     tokens = tokenize(text)
 
@@ -685,7 +695,7 @@ def evaluate_line(text, variables):
         var_name = tokens[0][1].lower()
         pos = 2
 
-    conversion, conv_start = _detect_conversion(tokens)
+    conversion, conv_start = _detect_conversion(tokens, rates=rates)
     eof_idx = len(tokens) - 1
     math_tokens, _ = _build_math(tokens, pos, conv_start, eof_idx, all_vars)
     result, _ = _try_parse(math_tokens)
@@ -769,6 +779,7 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
         lines = lines[:-1]
 
     variables = {}
+    rates = {}
     results_acc = []  # for total/sum accumulation
     fmt_opts = {"mode": "minSig", "precision": 10, "separator": "underscore"}
     evaluated = []  # list of (clean_line, result_or_none, fmt_opts_snapshot, vars_snapshot)
@@ -776,6 +787,15 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
     for line in lines:
         clean = RESULT_RE.sub("", line).rstrip()
         stripped = clean.strip()
+
+        # Check for rate directives
+        rm = RATE_RE.match(stripped)
+        if rm:
+            fr = rm.group(1).lower()
+            to = rm.group(2).lower()
+            rates[(fr, to)] = Decimal(rm.group(3).strip())
+            evaluated.append((clean, None, None, None))
+            continue
 
         # Check for format directives
         dm = DIRECTIVE_RE.match(stripped)
@@ -818,7 +838,7 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
             continue
 
         vars_before = dict(variables)
-        result, variables = evaluate_line(stripped, variables)
+        result, variables = evaluate_line(stripped, variables, rates=rates)
 
         if result == "TOTAL":
             total = sum(r for r in results_acc if r is not None)
@@ -848,12 +868,12 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
             output.append(f"{clean.ljust(align)}# => {fmt_str}")
             if use_color:
                 colored_output.append(
-                    colorize_line(clean, result, fmt_str, align, vsnap)
+                    colorize_line(clean, result, fmt_str, align, vsnap, rates=rates)
                 )
         else:
             output.append(clean)
             if use_color:
-                colored_output.append(colorize_line(clean, None, None, align, None))
+                colored_output.append(colorize_line(clean, None, None, align, None, rates=rates))
 
     new_content = "\n".join(output) + "\n"
     if show:
@@ -906,6 +926,7 @@ def process_json(content):
         lines = lines[:-1]
 
     variables = {}
+    rates = {}
     results_acc = []
     fmt_opts = {"mode": "minSig", "precision": 10, "separator": "underscore"}
     output = []
@@ -913,6 +934,14 @@ def process_json(content):
     for line in lines:
         clean = RESULT_RE.sub("", line).rstrip()
         stripped = clean.strip()
+
+        rm = RATE_RE.match(stripped)
+        if rm:
+            fr = rm.group(1).lower()
+            to = rm.group(2).lower()
+            rates[(fr, to)] = Decimal(rm.group(3).strip())
+            output.append({"input": clean, "result": None})
+            continue
 
         dm = DIRECTIVE_RE.match(stripped)
         if dm:
@@ -950,7 +979,7 @@ def process_json(content):
             output.append({"input": "", "result": None})
             continue
 
-        result, variables = evaluate_line(stripped, variables)
+        result, variables = evaluate_line(stripped, variables, rates=rates)
 
         if result == "TOTAL":
             total = sum(r for r in results_acc if r is not None)
