@@ -786,6 +786,8 @@ function render() {
   }
   scheduleHashUpdate();
   try { localStorage.setItem("calced-input", text); } catch(e) {}
+  const heading = lines.find(l => l.trim().startsWith("#"));
+  document.title = heading ? heading.replace(/^#+ */, "").trim() + " - calced" : "calced";
 }
 
 input.addEventListener("input", render);
