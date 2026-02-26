@@ -114,6 +114,7 @@ header div { display: flex; gap: 8px; }
   <div>
     <a class="header-link" href="#new" target="_blank">New</a>
     <button class="header-link" id="docs-btn" onclick="toggleDocs()">Docs &#x25BE;</button>
+    <button class="header-link" onclick="downloadFile()">Download</button>
     <button id="share-btn" onclick="shareURL()">Share</button>
   </div>
 </header>
@@ -846,6 +847,35 @@ async function loadFromHash() {
     console.error("Failed to decode URL hash:", e);
   }
   return true;
+}
+
+function formatForFile(text) {
+  const lines = text.split("\n");
+  const output = processText(text);
+  const resultLines = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (output[i].result !== null) resultLines.push(lines[i]);
+  }
+  const maxLen = resultLines.length ? Math.max(...resultLines.map(l => l.length)) : 0;
+  const align = Math.max(maxLen + 2, 40);
+  return lines.map((line, i) => {
+    if (output[i].result !== null) return line.padEnd(align) + "# => " + output[i].result;
+    return line;
+  }).join("\n");
+}
+
+function downloadFile() {
+  const text = input.value;
+  if (!text.trim()) return;
+  const content = formatForFile(text);
+  const blob = new Blob([content + "\n"], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const heading = text.split("\n").find(l => l.trim().startsWith("#"));
+  a.download = (heading ? heading.replace(/^#+ */, "").trim() : "calced") + ".txt";
+  a.href = url;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function shareURL() {
