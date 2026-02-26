@@ -84,16 +84,82 @@ header div { display: flex; gap: 8px; }
   line-height: 1.7; text-align: right;
   color: var(--result); white-space: nowrap; overflow: hidden;
 }
+#cheatsheet {
+  background: var(--header-bg); border-bottom: 1px solid var(--border);
+  padding: 12px 20px 16px; font-size: 0.85em;
+}
+.cs-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 24px;
+}
+@media (max-width: 600px) {
+  .cs-grid { grid-template-columns: repeat(2, 1fr); }
+}
+.cs-head {
+  display: flex; justify-content: space-between; align-items: center;
+  font-weight: 600; margin-bottom: 2px;
+}
+.cs-try { font-weight: normal; color: var(--accent); cursor: pointer; font-size: 0.9em; }
+.cs-try:hover { text-decoration: underline; }
+.cs-ex { color: var(--dim); line-height: 1.5; }
+.cs-foot {
+  margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border);
+  text-align: right;
+}
+.cs-foot a { color: var(--accent); font-size: 0.85em; text-decoration: none; }
+.cs-foot a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
 <header>
   <h1><a href=""><svg width="1.2em" height="1.2em" viewBox="0 0 64 64" style="vertical-align:-0.15em"><rect width="64" height="64" rx="14" fill="#2563eb"/><rect x="11" y="18" width="20" height="5" rx="2.5" fill="white" opacity=".4"/><rect x="11" y="30" width="14" height="5" rx="2.5" fill="white" opacity=".4"/><rect x="11" y="42" width="22" height="5" rx="2.5" fill="white" opacity=".4"/><rect x="39" y="18" width="14" height="5" rx="2.5" fill="white"/><rect x="43" y="30" width="10" height="5" rx="2.5" fill="white"/><rect x="37" y="42" width="16" height="5" rx="2.5" fill="white"/></svg> calced</a></h1>
   <div>
-    <a class="header-link" href="https://github.com/karlb/calced#features" target="_blank" rel="noopener">Docs</a>
+    <button class="header-link" id="docs-btn" onclick="toggleDocs()">Docs &#x25BE;</button>
     <button id="share-btn" onclick="shareURL()">Share</button>
   </div>
 </header>
+<div id="cheatsheet" hidden>
+  <div class="cs-grid">
+    <div>
+      <div class="cs-head">Basics <a class="cs-try" onclick="tryExample('basics')">Try</a></div>
+      <div class="cs-ex">2 + 3</div>
+      <div class="cs-ex">10 * (4 + 6)</div>
+      <div class="cs-ex">2 ^ 10</div>
+    </div>
+    <div>
+      <div class="cs-head">Variables <a class="cs-try" onclick="tryExample('variables')">Try</a></div>
+      <div class="cs-ex">price = 100</div>
+      <div class="cs-ex">qty = 3</div>
+      <div class="cs-ex">total</div>
+    </div>
+    <div>
+      <div class="cs-head">Percentages <a class="cs-try" onclick="tryExample('pct')">Try</a></div>
+      <div class="cs-ex">50% of 300</div>
+      <div class="cs-ex">200 + 15%</div>
+      <div class="cs-ex">200 - 10%</div>
+    </div>
+    <div>
+      <div class="cs-head">Units <a class="cs-try" onclick="tryExample('units')">Try</a></div>
+      <div class="cs-ex">5 km in miles</div>
+      <div class="cs-ex">100 C in F</div>
+      <div class="cs-ex">1 gib in mib</div>
+    </div>
+    <div>
+      <div class="cs-head">Functions <a class="cs-try" onclick="tryExample('funcs')">Try</a></div>
+      <div class="cs-ex">sqrt(16)</div>
+      <div class="cs-ex">round(3.14, 2)</div>
+      <div class="cs-ex">min(5, 2, 8)</div>
+    </div>
+    <div>
+      <div class="cs-head">Formatting <a class="cs-try" onclick="tryExample('fmt')">Try</a></div>
+      <div class="cs-ex">1.5k + 500</div>
+      <div class="cs-ex">@format = fixed(2)</div>
+      <div class="cs-ex">@separator = comma</div>
+    </div>
+  </div>
+  <div class="cs-foot">
+    <a href="https://github.com/karlb/calced#features" target="_blank" rel="noopener">Full docs &#x2192;</a>
+  </div>
+</div>
 <div class="editor-wrap">
   <div class="editor-inner">
     <div class="input-wrap">
@@ -663,6 +729,44 @@ const input = document.getElementById("input");
 const results = document.getElementById("results");
 const highlight = document.getElementById("highlight");
 const shareBtn = document.getElementById("share-btn");
+const docsBtn = document.getElementById("docs-btn");
+const cheatsheet = document.getElementById("cheatsheet");
+
+// --- Docs Panel ---
+const EXAMPLES = {
+  basics: "2 + 3\n10 * (4 + 6)\n2 ^ 10\n17 % 5",
+  variables: "price = 100\nqty = 3\nprice * qty\n\ntax_rate = 22%\ntotal = price * qty\ntax = total * tax_rate\nafter_tax = total - tax",
+  pct: "50% of 300\n200 + 15%\n200 - 10%",
+  units: "5 km in miles\n100 C in F\n1 gib in mib\n60 min in hr\n1 gal in l",
+  funcs: "sqrt(16)\nround(3.14159, 2)\nmin(5, 2, 8)\nmax(1, 9, 3)\nlog10(1000)",
+  fmt: "1000000\n\n@format = fixed(2)\n1000000\n\n@format = scientific\n1000000\n\n@separator = comma\n@format = minSig(3)\n1000000",
+};
+
+function toggleDocs() {
+  const show = cheatsheet.hidden;
+  cheatsheet.hidden = !show;
+  docsBtn.innerHTML = show ? "Docs &#x25B4;" : "Docs &#x25BE;";
+  try { localStorage.setItem("calced-docs", show ? "1" : "0"); } catch(e) {}
+}
+
+function tryExample(key) {
+  const text = EXAMPLES[key];
+  if (!text) return;
+  if (input.value.trim() && !confirm("Replace editor content with example?")) return;
+  input.value = text;
+  render();
+  cheatsheet.hidden = true;
+  docsBtn.innerHTML = "Docs &#x25BE;";
+  try { localStorage.setItem("calced-docs", "0"); } catch(e) {}
+  input.focus();
+}
+
+try {
+  if (localStorage.getItem("calced-docs") === "1") {
+    cheatsheet.hidden = false;
+    docsBtn.innerHTML = "Docs &#x25B4;";
+  }
+} catch(e) {}
 
 function render() {
   const text = input.value;
