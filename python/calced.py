@@ -16,7 +16,7 @@ import sys
 import time
 import zlib
 
-RESULT_RE = re.compile(r"\s{2,}# => .*$")
+RESULT_RE = re.compile(r"\s+# => .*$")
 DIRECTIVE_RE = re.compile(r"^@(format|separator)\s*=\s*(.+)$", re.IGNORECASE)
 FORMAT_RE = re.compile(r"^(minSig|fixed|scientific|auto)(?:\((\d+)\))?$", re.IGNORECASE)
 RATE_RE = re.compile(r"^@rate\s+(\w+)/(\w+)\s*=\s*(.+)$", re.IGNORECASE)
@@ -1407,7 +1407,7 @@ def main():
 
     if args.url:
         content = open(args.file).read()
-        content = re.sub(r"\s{2,}# => .*$", "", content, flags=re.MULTILINE)
+        content = re.sub(r"\s+# => .*$", "", content, flags=re.MULTILINE)
         compressed = zlib.compress(content.encode(), wbits=-15)
         encoded = base64.b64encode(compressed).decode()
         encoded = encoded.replace("+", "-").replace("/", "_").rstrip("=")

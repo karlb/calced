@@ -69,7 +69,7 @@ if (unitFailures) {
 }
 
 
-const RESULT_RE = /\s{2,}# => .*$/;
+const RESULT_RE = /\s+# => .*$/;
 
 let totalTests = 0;
 let totalPassed = 0;
