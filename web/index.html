@@ -583,6 +583,36 @@ function _tryParse(mathTokens) {
   }
 }
 
+function _reduceDateSubexprs(tokens, variables) {
+  let result = tokens.slice();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let i = 0; i < result.length; i++) {
+      if (result[i][0] !== "LPAREN") continue;
+      let depth = 1, j = i + 1;
+      while (j < result.length && depth > 0) {
+        if (result[j][0] === "LPAREN") depth++;
+        else if (result[j][0] === "RPAREN") depth--;
+        j++;
+      }
+      const sub = result.slice(i + 1, j - 1);
+      if (!sub.some(t => t[0] === "DATE")) continue;
+      const subEof = sub.concat([["EOF", null, 0, 0]]);
+      const dateResult = _tryDateEval(subEof, variables);
+      if (dateResult !== null) {
+        const [val] = dateResult;
+        if (val instanceof Big) {
+          result.splice(i, j - i, ["NUM", val, result[i][2], result[j - 1][3]]);
+          changed = true;
+          break;
+        }
+      }
+    }
+  }
+  return result;
+}
+
 function _tryDateEval(tokens, variables) {
   try { return _tryDateEvalInner(tokens, variables); }
   catch (e) { return null; }
@@ -695,11 +725,13 @@ function _tryDateEvalInner(tokens, variables) {
 }
 
 function evaluateLine(text, variables, rates) {
-  const tokens = tokenize(text);
+  let tokens = tokenize(text);
   if (tokens.some(t => t[0] === "TOTAL")) return ["TOTAL", variables];
   // Try date evaluation first
   const dateResult = _tryDateEval(tokens, variables);
   if (dateResult !== null) return dateResult;
+  // Reduce parenthesized date sub-expressions to numbers
+  tokens = _reduceDateSubexprs(tokens, variables || Object.create(null));
   const allVars = Object.create(null);
   for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
   for (const k in variables) allVars[k] = variables[k];
@@ -789,7 +821,7 @@ function classifyLine(text, variables, rates) {
   if (DIRECTIVE_RE.test(stripped)) return "directive";
   if (RATE_RE.test(stripped)) return "directive";
 
-  const tokens = tokenize(text);
+  let tokens = tokenize(text);
   const allNames = new Set();
   for (const k in BUILTIN_CONSTS) allNames.add(k);
   if (variables) { for (const k in variables) allNames.add(k); }
@@ -816,6 +848,8 @@ function classifyLine(text, variables, rates) {
       for (let i = 0; i < tokens.length; i++) {
         if (tokens[i][0] !== "EOF") active.add(i);
       }
+    } else {
+      tokens = _reduceDateSubexprs(tokens, variables || Object.create(null));
     }
   }
   if (hasMath && active.size === 0) {

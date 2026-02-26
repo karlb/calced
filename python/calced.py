@@ -445,7 +445,9 @@ def classify_line(text, variables, rates=None):
             for idx, t in enumerate(tokens):
                 if t[0] != "EOF":
                     active.add(idx)
-        # else fall through to normal classification
+        else:
+            # Reduce parenthesized date sub-expressions for classification
+            tokens = _reduce_date_subexprs(tokens, variables or {})
     if has_math and not active:
         if any(t[0] == "TOTAL" for t in tokens if t[0] != "EOF"):
             for idx, t in enumerate(tokens):
@@ -732,6 +734,42 @@ def _try_parse(math_tokens):
         return None, -1
 
 
+def _reduce_date_subexprs(tokens, variables):
+    """Replace parenthesized date sub-expressions with NUM tokens.
+
+    E.g. ``(2025-03-01 - 2025-01-01) days in s`` becomes ``59 days in s``.
+    Only replaces when the sub-expression evaluates to a number (Decimal).
+    """
+    result = list(tokens)
+    changed = True
+    while changed:
+        changed = False
+        for i, t in enumerate(result):
+            if t[0] != "LPAREN":
+                continue
+            depth = 1
+            j = i + 1
+            while j < len(result) and depth > 0:
+                if result[j][0] == "LPAREN":
+                    depth += 1
+                elif result[j][0] == "RPAREN":
+                    depth -= 1
+                j += 1
+            # j is now past the matching RPAREN
+            sub = result[i + 1 : j - 1]
+            if not any(tok[0] == DATE for tok in sub):
+                continue
+            sub_with_eof = sub + [("EOF", None, 0, 0)]
+            date_result = _try_date_eval(sub_with_eof, variables)
+            if date_result is not None:
+                val, _ = date_result
+                if isinstance(val, Decimal):
+                    result[i:j] = [("NUM", val, result[i][2], result[j - 1][3])]
+                    changed = True
+                    break
+    return result
+
+
 def _try_date_eval(tokens, variables):
     """Try to evaluate a date expression. Returns (result, variables) or None.
 
@@ -882,6 +920,10 @@ def evaluate_line(text, variables, rates=None):
     date_result = _try_date_eval(tokens, variables)
     if date_result is not None:
         return date_result
+
+    # Reduce parenthesized date sub-expressions to numbers
+    # e.g. (2025-03-01 - 2025-01-01) days in s → 59 days in s
+    tokens = _reduce_date_subexprs(tokens, variables or {})
 
     all_vars = {**BUILTIN_CONSTS, **variables}
 
