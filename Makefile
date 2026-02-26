@@ -30,7 +30,7 @@ deploy-web:
 	mkdir -p "$$TMPDIR/$$MAJOR"; \
 	cp web/index.html "$$TMPDIR/$$MAJOR/index.html"; \
 	cp web/og.png "$$TMPDIR/og.png"; \
-	printf '<!DOCTYPE html>\n<html>\n<head><meta http-equiv="refresh" content="0;url=./'"$$MAJOR"'/"></head>\n<body></body>\n</html>\n' > "$$TMPDIR/index.html"; \
+	printf '<!DOCTYPE html>\n<html>\n<head>\n<meta http-equiv="refresh" content="0;url=./'"$$MAJOR"'/">\n<meta property="og:title" content="calced">\n<meta property="og:description" content="A notepad calculator that evaluates math expressions in plain text. No install, works offline.">\n<meta property="og:type" content="website">\n<meta property="og:image" content="https://calced.karl.berlin/og.png">\n<meta property="og:url" content="https://calced.karl.berlin">\n</head>\n<body></body>\n</html>\n' > "$$TMPDIR/index.html"; \
 	touch "$$TMPDIR/.nojekyll"; \
 	cd "$$TMPDIR" && git add -A && git commit -m "Deploy web app v$$VERSION" && git push origin gh-pages
 
