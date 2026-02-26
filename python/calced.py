@@ -1162,29 +1162,51 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
             results_acc.append(None)
             evaluated.append((clean, None, None, None))
 
-    # Compute alignment column from longest line that has a result
-    result_lines = [c for c, r, _, _ in evaluated if r is not None]
-    if result_lines:
-        max_len = max(len(l) for l in result_lines)
-        align = max(max_len + 2, 40)
-    else:
-        align = 40
+    # Format output with per-section alignment (sections split at header lines)
+    def _flush_section(section):
+        """Compute alignment for a section and format its lines."""
+        result_lines = [c for c, r, _, _ in section if r is not None]
+        if result_lines:
+            max_len = max(len(l) for l in result_lines)
+            align = max(max_len + 2, 40)
+        else:
+            align = 40
+        out = []
+        col = []
+        for clean, result, opts, vsnap in section:
+            if result is not None:
+                fmt_str = format_result(result, opts)
+                out.append(f"{clean.ljust(align)}# => {fmt_str}")
+                if use_color:
+                    col.append(
+                        colorize_line(clean, result, fmt_str, align, vsnap, rates=rates)
+                    )
+            else:
+                out.append(clean)
+                if use_color:
+                    col.append(colorize_line(clean, None, None, align, None, rates=rates))
+        return out, col
 
-    # Format output
     output = []
     colored_output = []
-    for clean, result, opts, vsnap in evaluated:
-        if result is not None:
-            fmt_str = format_result(result, opts)
-            output.append(f"{clean.ljust(align)}# => {fmt_str}")
-            if use_color:
-                colored_output.append(
-                    colorize_line(clean, result, fmt_str, align, vsnap, rates=rates)
-                )
+    current_section = []
+    for entry in evaluated:
+        clean, result, opts, vsnap = entry
+        # Header lines start a new section
+        if result is None and clean.strip().startswith("#"):
+            if current_section:
+                out, col = _flush_section(current_section)
+                output.extend(out)
+                colored_output.extend(col)
+                current_section = []
+            # The header itself is a standalone entry
+            current_section.append(entry)
         else:
-            output.append(clean)
-            if use_color:
-                colored_output.append(colorize_line(clean, None, None, align, None, rates=rates))
+            current_section.append(entry)
+    if current_section:
+        out, col = _flush_section(current_section)
+        output.extend(out)
+        colored_output.extend(col)
 
     new_content = "\n".join(output) + "\n"
     if show:
