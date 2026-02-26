@@ -666,6 +666,8 @@ function highlightLine(text, cls) {
   return html;
 }
 
+const RESULT_RE = /\s{2,}# => .*$/;
+
 function processText(text) {
   const lines = text.split("\n");
   let variables = Object.create(null);
@@ -771,8 +773,10 @@ try {
 
 function render() {
   const text = input.value;
-  const lines = text.split("\n");
-  const output = processText(text);
+  const cleaned = text.split("\n").map(l => l.replace(RESULT_RE, "").trimEnd()).join("\n");
+  if (cleaned !== text) input.value = cleaned;
+  const lines = cleaned.split("\n");
+  const output = processText(cleaned);
   results.innerHTML = output.map(o =>
     '<div class="result-line">' + (o.result !== null ? escapeHTML(o.result) : '') + '</div>'
   ).join("");
