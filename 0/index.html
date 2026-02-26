@@ -74,9 +74,8 @@ header div { display: flex; gap: 8px; }
 }
 .hl-dim { color: var(--dim); }
 .hl-comment { font-weight: bold; }
-#input::placeholder { color: var(--dim); }
 #results {
-  width: 200px; min-width: 120px; background: var(--surface);
+  width: max-content; min-width: 10%; background: var(--surface);
   border-left: 1px solid var(--border); padding: 12px 16px;
   overflow: hidden; user-select: none;
 }
@@ -84,21 +83,101 @@ header div { display: flex; gap: 8px; }
   line-height: 1.7; text-align: right;
   color: var(--result); white-space: nowrap; overflow: hidden;
 }
+#cheatsheet {
+  background: var(--header-bg); border-bottom: 1px solid var(--border);
+  padding: 12px 20px 16px; font-size: 0.85em;
+}
+.cs-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 24px;
+}
+@media (max-width: 600px) {
+  .cs-grid { grid-template-columns: repeat(2, 1fr); }
+}
+.cs-head {
+  display: flex; justify-content: space-between; align-items: center;
+  font-weight: 600; margin-bottom: 2px;
+}
+.cs-try { font-weight: normal; color: var(--accent); cursor: pointer; font-size: 0.9em; }
+.cs-try:hover { text-decoration: underline; }
+.cs-ex { color: var(--dim); line-height: 1.5; }
+.cs-foot {
+  margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border);
+  text-align: right;
+}
+.cs-foot a { color: var(--accent); font-size: 0.85em; text-decoration: none; }
+.cs-foot a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
 <header>
   <h1><a href=""><svg width="1.2em" height="1.2em" viewBox="0 0 64 64" style="vertical-align:-0.15em"><rect width="64" height="64" rx="14" fill="#2563eb"/><rect x="11" y="18" width="20" height="5" rx="2.5" fill="white" opacity=".4"/><rect x="11" y="30" width="14" height="5" rx="2.5" fill="white" opacity=".4"/><rect x="11" y="42" width="22" height="5" rx="2.5" fill="white" opacity=".4"/><rect x="39" y="18" width="14" height="5" rx="2.5" fill="white"/><rect x="43" y="30" width="10" height="5" rx="2.5" fill="white"/><rect x="37" y="42" width="16" height="5" rx="2.5" fill="white"/></svg> calced</a></h1>
   <div>
-    <a class="header-link" href="https://github.com/karlb/calced#features" target="_blank" rel="noopener">Docs</a>
+    <a class="header-link" href="#new" target="_blank">New</a>
+    <button class="header-link" id="docs-btn" onclick="toggleDocs()">Docs &#x25BE;</button>
     <button id="share-btn" onclick="shareURL()">Share</button>
+    <button class="header-link" onclick="downloadFile()">Download</button>
   </div>
 </header>
+<div id="cheatsheet" hidden>
+  <div class="cs-grid">
+    <div>
+      <div class="cs-head">Basics <a class="cs-try" onclick="tryExample('basics')">Try</a></div>
+      <div class="cs-ex">2 + 3</div>
+      <div class="cs-ex">10 * (4 + 6)</div>
+      <div class="cs-ex">2 ^ 10</div>
+    </div>
+    <div>
+      <div class="cs-head">Variables <a class="cs-try" onclick="tryExample('variables')">Try</a></div>
+      <div class="cs-ex">price = 100</div>
+      <div class="cs-ex">qty = 3</div>
+      <div class="cs-ex">total</div>
+    </div>
+    <div>
+      <div class="cs-head">Percentages <a class="cs-try" onclick="tryExample('pct')">Try</a></div>
+      <div class="cs-ex">50% of 300</div>
+      <div class="cs-ex">200 + 15%</div>
+      <div class="cs-ex">200 - 10%</div>
+    </div>
+    <div>
+      <div class="cs-head">Units <a class="cs-try" onclick="tryExample('units')">Try</a></div>
+      <div class="cs-ex">5 km in miles</div>
+      <div class="cs-ex">100 C in F</div>
+      <div class="cs-ex">1 gib in mib</div>
+    </div>
+    <div>
+      <div class="cs-head">Functions <a class="cs-try" onclick="tryExample('funcs')">Try</a></div>
+      <div class="cs-ex">sqrt(16)</div>
+      <div class="cs-ex">round(3.14, 2)</div>
+      <div class="cs-ex">min(5, 2, 8)</div>
+    </div>
+    <div>
+      <div class="cs-head">Rates <a class="cs-try" onclick="tryExample('rates')">Try</a></div>
+      <div class="cs-ex">@rate USD/EUR = 0.92</div>
+      <div class="cs-ex">100 USD in EUR</div>
+      <div class="cs-ex">50 EUR in USD</div>
+    </div>
+    <div>
+      <div class="cs-head">Dates <a class="cs-try" onclick="tryExample('dates')">Try</a></div>
+      <div class="cs-ex">today + 2 weeks</div>
+      <div class="cs-ex">2025-12-25 - today</div>
+      <div class="cs-ex">days until 2025-12-31</div>
+    </div>
+    <div>
+      <div class="cs-head">Formatting <a class="cs-try" onclick="tryExample('fmt')">Try</a></div>
+      <div class="cs-ex">1.5k + 500</div>
+      <div class="cs-ex">@format = fixed(2)</div>
+      <div class="cs-ex">@separator = comma</div>
+    </div>
+  </div>
+  <div class="cs-foot">
+    <a href="https://github.com/karlb/calced#features" target="_blank" rel="noopener">Full docs &#x2192;</a>
+  </div>
+</div>
 <div class="editor-wrap">
   <div class="editor-inner">
     <div class="input-wrap">
       <div id="highlight" aria-hidden="true"></div>
-      <textarea id="input" spellcheck="false" placeholder="rent 1500&#10;groceries 200 + 150&#10;utilities 80 + 45&#10;total"></textarea>
+      <textarea id="input" spellcheck="false"></textarea>
     </div>
     <div id="results"></div>
   </div>
@@ -139,6 +218,61 @@ const BUILTIN_FUNCS_N = {
 };
 const BUILTIN_FUNC_NAMES = new Set([...Object.keys(BUILTIN_FUNCS_1), ...Object.keys(BUILTIN_FUNCS_N)]);
 const BUILTIN_CONSTS = { pi: new Big(Math.PI.toString()), e: new Big(Math.E.toString()), tau: new Big((2 * Math.PI).toString()) };
+
+// --- Date/time support ---
+const ISO_DATE_JS_RE = /^\d{4}-\d{2}-\d{2}/;
+const DATE_KEYWORDS = new Set(["today", "tomorrow", "yesterday"]);
+const DURATION_UNITS = new Set(["day", "days", "week", "weeks", "month", "months", "year", "years"]);
+
+function _makeDate(y, m, d) { return { _isDate: true, y, m, d }; }
+function _dateToISO(dt) {
+  const yy = String(dt.y).padStart(4, '0');
+  const mm = String(dt.m).padStart(2, '0');
+  const dd = String(dt.d).padStart(2, '0');
+  return yy + '-' + mm + '-' + dd;
+}
+function _dateFromISO(s) {
+  const parts = s.split('-');
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  // Validate
+  if (m < 1 || m > 12 || d < 1 || d > _daysInMonth(y, m)) return null;
+  return _makeDate(y, m, d);
+}
+function _isDateObj(v) { return v && v._isDate === true; }
+function _daysInMonth(y, m) {
+  return new Date(y, m, 0).getDate();
+}
+function _todayDate() {
+  const now = new Date();
+  return _makeDate(now.getFullYear(), now.getMonth() + 1, now.getDate());
+}
+function _resolveDateKeyword(kw) {
+  const t = _todayDate();
+  if (kw === "today") return t;
+  if (kw === "tomorrow") return _dateAddDays(t, 1);
+  if (kw === "yesterday") return _dateAddDays(t, -1);
+  return null;
+}
+function _dateToJSDate(dt) { return new Date(dt.y, dt.m - 1, dt.d); }
+function _jsDateToDate(jsd) { return _makeDate(jsd.getFullYear(), jsd.getMonth() + 1, jsd.getDate()); }
+function _dateAddDays(dt, n) {
+  const jsd = _dateToJSDate(dt);
+  jsd.setDate(jsd.getDate() + n);
+  return _jsDateToDate(jsd);
+}
+function _dateAddMonths(dt, months) {
+  let m = dt.m - 1 + months;
+  let y = dt.y + Math.floor(m / 12);
+  m = ((m % 12) + 12) % 12 + 1;
+  const maxDay = _daysInMonth(y, m);
+  return _makeDate(y, m, Math.min(dt.d, maxDay));
+}
+function _dateDiffDays(d1, d2) {
+  const ms = _dateToJSDate(d1).getTime() - _dateToJSDate(d2).getTime();
+  return Math.round(ms / 86400000);
+}
 
 // --- Unit conversion tables ---
 const UNIT_TABLE = {
@@ -221,6 +355,19 @@ function tokenize(text) {
     if (text[i] === ' ' || text[i] === '\t') { i++; continue; }
     const start = i;
     const slice = text.substring(i);
+    // ISO date: 2025-01-15
+    if (text[i] >= '0' && text[i] <= '9') {
+      const dm = slice.match(ISO_DATE_JS_RE);
+      if (dm) {
+        const dateObj = _dateFromISO(dm[0]);
+        if (dateObj) {
+          const end = i + dm[0].length;
+          tokens.push(["DATE", dateObj, start, end]);
+          i = end;
+          continue;
+        }
+      }
+    }
     // Hex/binary/octal
     if (text[i] === "0" && i + 1 < n && "xXbBoO".includes(text[i + 1])) {
       const hm = slice.match(HEX_BIN_OCT_RE);
@@ -262,7 +409,9 @@ function tokenize(text) {
       const word = wm[0];
       const wl = word.toLowerCase();
       const end = i + wm[0].length;
-      if (wl === "of") tokens.push(["OF", "of", start, end]);
+      if (DATE_KEYWORDS.has(wl)) tokens.push(["DATE", _resolveDateKeyword(wl), start, end]);
+      else if (wl === "of") tokens.push(["OF", "of", start, end]);
+      else if (wl === "as") tokens.push(["AS", "as", start, end]);
       else if (wl === "total" || wl === "sum") tokens.push(["TOTAL", wl, start, end]);
       else if (BUILTIN_FUNC_NAMES.has(wl)) tokens.push(["FUNC", wl, start, end]);
       else tokens.push(["WORD", word, start, end]);
@@ -291,6 +440,18 @@ class Parser {
         const right = this.parseTerm();
         left = op === "+" ? left.plus(right) : left.minus(right);
       }
+    }
+    // Handle "X as % of Y" → (X / Y) * 100
+    if (this.peek()[0] === "AS"
+        && this.pos + 2 < this.tokens.length
+        && this.tokens[this.pos + 1][0] === "MULOP" && this.tokens[this.pos + 1][1] === "%"
+        && this.tokens[this.pos + 2][0] === "OF") {
+      this.consume(); // AS
+      this.consume(); // %
+      this.consume(); // OF
+      const right = this.parseExpr();
+      if (right.eq(0)) throw new Error("division by zero");
+      left = left.div(right).times(100);
     }
     return left;
   }
@@ -358,7 +519,7 @@ class Parser {
   }
 }
 
-function _detectConversion(tokens) {
+function _detectConversion(tokens, rates) {
   const eofIdx = tokens.length - 1;
   if (eofIdx >= 4) {
     const tFr = tokens[eofIdx - 3];
@@ -373,6 +534,12 @@ function _detectConversion(tokens) {
         const [frDim, frFactor] = UNIT_LOOKUP[frName];
         const [toDim, toFactor] = UNIT_LOOKUP[toName];
         if (frDim === toDim) return [[frDim, frFactor, toFactor], eofIdx - 3];
+      }
+      if (rates) {
+        const pair = frName + "/" + toName;
+        const rev = toName + "/" + frName;
+        if (pair in rates) return [["rate", rates[pair], new Big(1)], eofIdx - 3];
+        if (rev in rates) return [["rate", new Big(1), rates[rev]], eofIdx - 3];
       }
     }
   }
@@ -390,10 +557,12 @@ function _buildMath(tokens, start, convStart, eofIdx, allVars) {
       const wl = t[1].toLowerCase();
       if (wl in allVars) {
         const v = allVars[wl];
-        mathTokens.push(["NUM", v instanceof Big ? v : new Big(v), t[2], t[3]]);
-        mathToOrig.push(idx);
+        if (!_isDateObj(v)) {
+          mathTokens.push(["NUM", v instanceof Big ? v : new Big(v), t[2], t[3]]);
+          mathToOrig.push(idx);
+        }
       }
-    } else if (t[0] === "EQ") {
+    } else if (t[0] === "EQ" || t[0] === "DATE") {
       // skip
     } else if (t[0] === "COMMA" && parenDepth === 0) {
       // skip
@@ -404,7 +573,26 @@ function _buildMath(tokens, start, convStart, eofIdx, allVars) {
       mathToOrig.push(idx);
     }
   }
-  return [mathTokens, mathToOrig];
+  // Strip empty parentheses left behind when WORDs inside parens are skipped
+  let mt = mathTokens, mo = mathToOrig, changed = true;
+  while (changed) {
+    changed = false;
+    const nt = [], no = [];
+    let i = 0;
+    while (i < mt.length) {
+      if (i + 1 < mt.length && mt[i][0] === "LPAREN" && mt[i + 1][0] === "RPAREN") {
+        i += 2;
+        changed = true;
+      } else {
+        nt.push(mt[i]);
+        no.push(mo[i]);
+        i++;
+      }
+    }
+    mt = nt;
+    mo = no;
+  }
+  return [mt, mo];
 }
 
 function _tryParse(mathTokens) {
@@ -427,14 +615,184 @@ function _tryParse(mathTokens) {
   }
 }
 
-function evaluateLine(text, variables) {
-  const tokens = tokenize(text);
+function _reduceDateSubexprs(tokens, variables) {
+  let result = tokens.slice();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let i = 0; i < result.length; i++) {
+      if (result[i][0] !== "LPAREN") continue;
+      let depth = 1, j = i + 1;
+      while (j < result.length && depth > 0) {
+        if (result[j][0] === "LPAREN") depth++;
+        else if (result[j][0] === "RPAREN") depth--;
+        j++;
+      }
+      const sub = result.slice(i + 1, j - 1);
+      if (!sub.some(t => t[0] === "DATE")) continue;
+      const subEof = sub.concat([["EOF", null, 0, 0]]);
+      const dateResult = _tryDateEval(subEof, variables);
+      if (dateResult !== null) {
+        const [val] = dateResult;
+        if (val instanceof Big) {
+          result.splice(i, j - i, ["NUM", val, result[i][2], result[j - 1][3]]);
+          changed = true;
+          break;
+        }
+      }
+    }
+  }
+  return result;
+}
+
+function _tryDateEval(tokens, variables) {
+  try { return _tryDateEvalInner(tokens, variables); }
+  catch (e) { return null; }
+}
+
+function _tryDateEvalInner(tokens, variables) {
+  // Resolve date-holding variables
+  const resolved = tokens.map(t => {
+    if (t[0] === "WORD") {
+      const wl = t[1].toLowerCase();
+      const val = variables[wl];
+      if (_isDateObj(val)) return ["DATE", val, t[2], t[3]];
+    }
+    return t;
+  });
+  if (!resolved.some(t => t[0] === "DATE")) return null;
+
+  // Strip assignment prefix
+  let varName = null;
+  let toks = resolved;
+  if (toks.length >= 3 && toks[0][0] === "WORD" && toks[1][0] === "EQ") {
+    varName = toks[0][1].toLowerCase();
+    toks = toks.slice(2);
+  }
+  let body = toks.filter(t => t[0] !== "EOF");
+  if (!body.length) return null;
+
+  // Strip outer parentheses
+  while (body.length >= 2 && body[0][0] === "LPAREN" && body[body.length - 1][0] === "RPAREN") {
+    body = body.slice(1, -1);
+  }
+  if (!body.length) return null;
+
+  function _finish(result) {
+    if (varName) {
+      const newVars = Object.create(null);
+      for (const k in variables) newVars[k] = variables[k];
+      newVars[varName] = result;
+      return [result, newVars];
+    }
+    return [result, variables];
+  }
+
+  // Pattern 1: "days/weeks until/since DATE" (checked before label stripping)
+  if (body.length === 3
+      && body[0][0] === "WORD" && (body[0][1].toLowerCase() === "days" || body[0][1].toLowerCase() === "weeks")
+      && body[1][0] === "WORD" && (body[1][1].toLowerCase() === "until" || body[1][1].toLowerCase() === "since")
+      && body[2][0] === "DATE") {
+    const today = _todayDate();
+    const target = body[2][1];
+    const dir = body[1][1].toLowerCase();
+    const diffDays = dir === "until" ? _dateDiffDays(target, today) : _dateDiffDays(today, target);
+    if (body[0][1].toLowerCase() === "weeks") return _finish(new Big(diffDays).div(7));
+    return _finish(new Big(diffDays));
+  }
+
+  // Strip leading label tokens before the first DATE for remaining patterns
+  const LABEL_TYPES = new Set(["WORD", "LPAREN", "RPAREN", "COMMA"]);
+  let firstDateIdx = -1;
+  for (let i = 0; i < body.length; i++) {
+    if (body[i][0] === "DATE") { firstDateIdx = i; break; }
+  }
+  if (firstDateIdx > 0 && body.slice(0, firstDateIdx).every(t => LABEL_TYPES.has(t[0]))) {
+    body = body.slice(firstDateIdx);
+  }
+
+  // Pattern 0: bare DATE
+  if (body.length === 1 && body[0][0] === "DATE") {
+    return _finish(body[0][1]);
+  }
+
+  // Pattern 2: DATE ± expr duration_unit (supports compound: + 1 week + 3 days)
+  if (body.length >= 4
+      && body[0][0] === "DATE"
+      && body[1][0] === "ADDOP") {
+    const allVars = Object.create(null);
+    for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
+    for (const k in variables) allVars[k] = variables[k];
+    let d = body[0][1];
+    let pos = 1;
+    let ok = true;
+    while (pos < body.length && body[pos][0] === "ADDOP") {
+      const op = body[pos][1];
+      pos++;
+      // Find next DURATION_WORD
+      let durPos = -1;
+      for (let j = pos; j < body.length; j++) {
+        if (body[j][0] === "WORD" && DURATION_UNITS.has(body[j][1].toLowerCase())) {
+          durPos = j;
+          break;
+        }
+      }
+      if (durPos < 0) { ok = false; break; }
+      const unit = body[durPos][1].toLowerCase();
+      const midTokens = body.slice(pos, durPos);
+      if (!midTokens.length) { ok = false; break; }
+      // Resolve variables
+      const resolvedMid = [];
+      let resolved = true;
+      for (const t of midTokens) {
+        if (t[0] === "WORD") {
+          const wl = t[1].toLowerCase();
+          if (wl in allVars && !_isDateObj(allVars[wl])) {
+            const v = allVars[wl];
+            resolvedMid.push(["NUM", v instanceof Big ? v : new Big(v), t[2], t[3]]);
+          } else { resolved = false; break; }
+        } else resolvedMid.push(t);
+      }
+      if (!resolved) { ok = false; break; }
+      resolvedMid.push(["EOF", null, 0, 0]);
+      const [nVal] = _tryParse(resolvedMid);
+      if (nVal === null) { ok = false; break; }
+      let n = Math.round(nVal.toNumber());
+      if (op === "-") n = -n;
+      if (unit === "day" || unit === "days") d = _dateAddDays(d, n);
+      else if (unit === "week" || unit === "weeks") d = _dateAddDays(d, n * 7);
+      else if (unit === "month" || unit === "months") d = _dateAddMonths(d, n);
+      else if (unit === "year" || unit === "years") d = _dateAddMonths(d, n * 12);
+      else { ok = false; break; }
+      pos = durPos + 1;
+    }
+    if (ok && pos >= body.length) return _finish(d);
+  }
+
+  // Pattern 3: DATE - DATE → number of days
+  if (body.length === 3
+      && body[0][0] === "DATE"
+      && body[1][0] === "ADDOP" && body[1][1] === "-"
+      && body[2][0] === "DATE") {
+    return _finish(new Big(_dateDiffDays(body[0][1], body[2][1])));
+  }
+
+  return null;
+}
+
+function evaluateLine(text, variables, rates) {
+  let tokens = tokenize(text);
   if (tokens.some(t => t[0] === "TOTAL")) return ["TOTAL", variables];
+  // Try date evaluation first
+  const dateResult = _tryDateEval(tokens, variables);
+  if (dateResult !== null) return dateResult;
+  // Reduce parenthesized date sub-expressions to numbers
+  tokens = _reduceDateSubexprs(tokens, variables || Object.create(null));
   const allVars = Object.create(null);
   for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
   for (const k in variables) allVars[k] = variables[k];
   const hasValue = tokens.some(t =>
-    t[0] === "NUM" || t[0] === "PCT" || t[0] === "FUNC" || (t[0] === "WORD" && t[1].toLowerCase() in allVars)
+    t[0] === "NUM" || t[0] === "PCT" || t[0] === "FUNC" || t[0] === "DATE" || (t[0] === "WORD" && t[1].toLowerCase() in allVars)
   );
   if (!hasValue) return [null, variables];
   let pos = 0;
@@ -443,7 +801,7 @@ function evaluateLine(text, variables) {
     varName = tokens[0][1].toLowerCase();
     pos = 2;
   }
-  const [conversion, convStart] = _detectConversion(tokens);
+  const [conversion, convStart] = _detectConversion(tokens, rates);
   const eofIdx = tokens.length - 1;
   const [mathTokens] = _buildMath(tokens, pos, convStart, eofIdx, allVars);
   let [result] = _tryParse(mathTokens);
@@ -469,6 +827,7 @@ function addCommas(s) {
 }
 
 function formatResult(n, fmtOpts) {
+  if (_isDateObj(n)) return _dateToISO(n);
   if (!fmtOpts) fmtOpts = { mode: "minSig", precision: 10, separator: "underscore" };
   const nf = typeof n.toNumber === "function" ? n.toNumber() : n;
   const mode = fmtOpts.mode;
@@ -509,28 +868,47 @@ function formatResult(n, fmtOpts) {
 
 const DIRECTIVE_RE = /^@(format|separator)\s*=\s*(.+)$/i;
 const FORMAT_RE = /^(minSig|fixed|scientific|auto)(?:\((\d+)\))?$/i;
+const RATE_RE = /^@rate\s+(\w+)\/(\w+)\s*=\s*(.+)$/i;
 
-function classifyLine(text, variables) {
+function classifyLine(text, variables, rates) {
   const stripped = text.trim();
   if (!stripped) return "blank";
   if (stripped.startsWith("#")) return "comment";
   if (DIRECTIVE_RE.test(stripped)) return "directive";
+  if (RATE_RE.test(stripped)) return "directive";
 
-  const tokens = tokenize(text);
+  let tokens = tokenize(text);
   const allNames = new Set();
   for (const k in BUILTIN_CONSTS) allNames.add(k);
   if (variables) { for (const k in variables) allNames.add(k); }
 
+  let hasDate = tokens.some(t => t[0] === "DATE" && t[0] !== "EOF");
+  if (!hasDate && variables) {
+    for (const t of tokens) {
+      if (t[0] === "WORD" && _isDateObj(variables[t[1].toLowerCase()])) { hasDate = true; break; }
+    }
+  }
+
   const hasMath = tokens.some(t =>
     t[0] !== "EOF" && (
-      t[0] === "NUM" || t[0] === "PCT" || t[0] === "FUNC" || t[0] === "TOTAL"
+      t[0] === "NUM" || t[0] === "PCT" || t[0] === "FUNC" || t[0] === "TOTAL" || t[0] === "DATE"
       || (t[0] === "WORD" && allNames.has(t[1].toLowerCase()))
     )
   );
 
   const active = new Set();
 
-  if (hasMath) {
+  if (hasDate && hasMath) {
+    const dateResult = _tryDateEval(tokens, variables || Object.create(null));
+    if (dateResult !== null) {
+      for (let i = 0; i < tokens.length; i++) {
+        if (tokens[i][0] !== "EOF") active.add(i);
+      }
+    } else {
+      tokens = _reduceDateSubexprs(tokens, variables || Object.create(null));
+    }
+  }
+  if (hasMath && active.size === 0) {
     if (tokens.some(t => t[0] === "TOTAL")) {
       for (let i = 0; i < tokens.length; i++) {
         if (tokens[i][0] === "TOTAL") active.add(i);
@@ -543,7 +921,7 @@ function classifyLine(text, variables) {
         mathStart = 2;
       }
 
-      const [conversion, convStart] = _detectConversion(tokens);
+      const [conversion, convStart] = _detectConversion(tokens, rates);
       const eofIdx = tokens.length - 1;
       if (conversion !== null) {
         active.add(convStart);
@@ -599,16 +977,28 @@ function highlightLine(text, cls) {
   return html;
 }
 
+const RESULT_RE = /\s{2,}# => .*$/;
+
 function processText(text) {
   const lines = text.split("\n");
   let variables = Object.create(null);
+  const rates = Object.create(null);
   let resultsAcc = [];
   let fmtOpts = { mode: "minSig", precision: 10, separator: "underscore" };
   const output = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const stripped = line.trim();
-    const cls = classifyLine(line, variables);
+    const rm = stripped.match(RATE_RE);
+    if (rm) {
+      const cls = classifyLine(line, variables, rates);
+      const fr = rm[1].toLowerCase();
+      const to = rm[2].toLowerCase();
+      rates[fr + "/" + to] = new Big(rm[3].trim());
+      output.push({ result: null, cls });
+      continue;
+    }
+    const cls = classifyLine(line, variables, rates);
     const dm = stripped.match(DIRECTIVE_RE);
     if (dm) {
       const key = dm[1].toLowerCase();
@@ -638,10 +1028,10 @@ function processText(text) {
       output.push({ result: null, cls });
       continue;
     }
-    const [result, newVars] = evaluateLine(stripped, variables);
+    const [result, newVars] = evaluateLine(stripped, variables, rates);
     variables = newVars;
     if (result === "TOTAL") {
-      const total = resultsAcc.reduce((s, r) => r !== null ? s.plus(r) : s, new Big(0));
+      const total = resultsAcc.reduce((s, r) => r !== null && !_isDateObj(r) ? s.plus(r) : s, new Big(0));
       resultsAcc.push(total);
       output.push({ result: formatResult(total, { ...fmtOpts }), cls });
     } else if (result !== null) {
@@ -663,11 +1053,53 @@ const input = document.getElementById("input");
 const results = document.getElementById("results");
 const highlight = document.getElementById("highlight");
 const shareBtn = document.getElementById("share-btn");
+const docsBtn = document.getElementById("docs-btn");
+const cheatsheet = document.getElementById("cheatsheet");
+
+// --- Docs Panel ---
+const EXAMPLES = {
+  basics: "2 + 3\n10 * (4 + 6)\n2 ^ 10\n17 % 5",
+  variables: "price = 100\nqty = 3\nprice * qty\n\ntax_rate = 22%\ntotal = price * qty\ntax = total * tax_rate\nafter_tax = total - tax",
+  pct: "50% of 300\n200 + 15%\n200 - 10%",
+  units: "5 km in miles\n100 C in F\n1 gib in mib\n60 min in hr\n1 gal in l",
+  funcs: "sqrt(16)\nround(3.14159, 2)\nmin(5, 2, 8)\nmax(1, 9, 3)\nlog10(1000)",
+  fmt: "1000000\n\n@format = fixed(2)\n1000000\n\n@format = scientific\n1000000\n\n@separator = comma\n@format = minSig(3)\n1000000",
+  dates: "today + 2 weeks\nyesterday\ntomorrow\n\n# Deadline\ndeadline = 2026-12-31\ndays until deadline\n\n# Date math\n2025-01-31 + 1 month\n2025-03-01 - 2025-01-01",
+  rates: "@rate USD/EUR = 0.92\n100 USD in EUR\n50 EUR in USD\n\n@rate BTC/USD = 97500\n0.5 BTC in USD",
+};
+
+function toggleDocs() {
+  const show = cheatsheet.hidden;
+  cheatsheet.hidden = !show;
+  docsBtn.innerHTML = show ? "Docs &#x25B4;" : "Docs &#x25BE;";
+  try { localStorage.setItem("calced-docs", show ? "1" : "0"); } catch(e) {}
+}
+
+function tryExample(key) {
+  const text = EXAMPLES[key];
+  if (!text) return;
+  if (input.value.trim() && !confirm("Replace editor content with example?")) return;
+  input.value = text;
+  render();
+  cheatsheet.hidden = true;
+  docsBtn.innerHTML = "Docs &#x25BE;";
+  try { localStorage.setItem("calced-docs", "0"); } catch(e) {}
+  input.focus();
+}
+
+try {
+  if (localStorage.getItem("calced-docs") === "1") {
+    cheatsheet.hidden = false;
+    docsBtn.innerHTML = "Docs &#x25B4;";
+  }
+} catch(e) {}
 
 function render() {
   const text = input.value;
-  const lines = text.split("\n");
-  const output = processText(text);
+  const cleaned = text.split("\n").map(l => l.replace(RESULT_RE, "")).join("\n");
+  if (cleaned !== text) input.value = cleaned;
+  const lines = cleaned.split("\n");
+  const output = processText(cleaned);
   results.innerHTML = output.map(o =>
     '<div class="result-line">' + (o.result !== null ? escapeHTML(o.result) : '') + '</div>'
   ).join("");
@@ -681,9 +1113,13 @@ function render() {
     resLines[i].style.height = hlLines[i].offsetHeight + 'px';
   }
   scheduleHashUpdate();
+  try { localStorage.setItem("calced-input", text); } catch(e) {}
+  const heading = lines.find(l => l.trim().startsWith("#"));
+  document.title = heading ? heading.replace(/^#+ */, "").trim() + " - calced" : "calced";
 }
 
 input.addEventListener("input", render);
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !cheatsheet.hidden) toggleDocs(); });
 
 // --- URL Hash Encoding ---
 let hashTimer = null;
@@ -727,13 +1163,47 @@ async function updateHash() {
 
 async function loadFromHash() {
   const hash = location.hash.slice(1);
-  if (!hash) return;
+  if (!hash) return false;
+  if (hash === "new") {
+    history.replaceState(null, "", location.pathname);
+    return true;
+  }
   try {
     input.value = await decompressText(hash);
     render();
   } catch (e) {
     console.error("Failed to decode URL hash:", e);
   }
+  return true;
+}
+
+function formatForFile(text) {
+  const lines = text.split("\n");
+  const output = processText(text);
+  const resultLines = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (output[i].result !== null) resultLines.push(lines[i]);
+  }
+  const maxLen = resultLines.length ? Math.max(...resultLines.map(l => l.length)) : 0;
+  const align = Math.max(maxLen + 2, 40);
+  return lines.map((line, i) => {
+    if (output[i].result !== null) return line.padEnd(align) + "# => " + output[i].result;
+    return line;
+  }).join("\n");
+}
+
+function downloadFile() {
+  const text = input.value;
+  if (!text.trim()) return;
+  const content = formatForFile(text);
+  const blob = new Blob([content + "\n"], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const heading = text.split("\n").find(l => l.trim().startsWith("#"));
+  a.download = (heading ? heading.replace(/^#+ */, "").trim() : "calced") + ".txt";
+  a.href = url;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function shareURL() {
@@ -744,7 +1214,39 @@ function shareURL() {
   });
 }
 
-loadFromHash();
+const WELCOME = `Write math anywhere. Results appear on the right.
+
+# Monthly Budget
+
+rent 1500
+groceries 200 + 150
+utilities 80 + 45
+total
+
+# Variables and percentages
+
+income = 5000
+tax = income * 22%
+after_tax = income - tax
+
+# Unit conversions
+
+5 km in miles
+100 C in F
+
+Try editing these lines, or click New for a blank sheet.
+Click Docs for more features (functions, formatting, etc.)
+`;
+
+loadFromHash().then((hadHash) => {
+  if (!input.value && !hadHash) {
+    try {
+      const saved = localStorage.getItem("calced-input");
+      if (saved) { input.value = saved; render(); }
+      else if (saved === null) { input.value = WELCOME; render(); }
+    } catch(e) {}
+  }
+});
 </script>
 </body>
 </html>
