@@ -24,10 +24,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 from calced import (
     tokenize,
     evaluate_line,
+    classify_line,
     format_result,
     convert_temperature,
     SI_PREFIX,
     UNIT_TABLE,
+    BUILTIN_CONSTS,
+    BUILTIN_FUNC_NAMES,
 )
 
 # ---------------------------------------------------------------------------
@@ -362,3 +365,156 @@ def test_si_prefix_tokenizes_correctly(prefix, expected_multiplier):
     assert num_tokens[0][1] == expected_multiplier, (
         f"1{prefix}: expected {expected_multiplier}, got {num_tokens[0][1]}"
     )
+
+
+# ---------------------------------------------------------------------------
+# 9. Nested functions preserve arithmetic identities
+# ---------------------------------------------------------------------------
+
+_single_arg_funcs = [f for f in BUILTIN_FUNC_NAMES if f not in ("min", "max", "round")]
+
+
+@given(a=st.decimals(
+    allow_nan=False,
+    allow_infinity=False,
+    min_value=Decimal("1"),
+    max_value=Decimal("1000"),
+    places=4,
+).filter(lambda d: d.is_finite()))
+@settings(max_examples=200)
+def test_nested_abs_identity(a):
+    """abs(abs(a)) == abs(a) for positive a."""
+    s = decimal_to_str(a)
+    r1, _ = evaluate_line(f"abs({s})", {})
+    r2, _ = evaluate_line(f"abs(abs({s}))", {})
+    assert r1 is not None
+    assert r2 is not None
+    assert r1 == r2
+
+
+@given(a=sane_decimals)
+@settings(max_examples=200)
+def test_sqrt_squared(a):
+    """sqrt(a^2) ≈ abs(a)."""
+    assume(a != 0)
+    s = decimal_to_str(a)
+    r1, _ = evaluate_line(f"sqrt(({s})^2)", {})
+    r2, _ = evaluate_line(f"abs({s})", {})
+    assert r1 is not None
+    assert r2 is not None
+    diff = abs(r1 - r2)
+    assert diff < Decimal("0.001"), f"sqrt(({s})^2)={r1} vs abs({s})={r2}"
+
+
+# ---------------------------------------------------------------------------
+# 10. Text label invariance: label prefix should not change result
+# ---------------------------------------------------------------------------
+
+_labels = st.sampled_from(["rent", "price", "cost", "total_value", "result"])
+
+
+@given(expr=simple_expressions(), label=_labels)
+@settings(max_examples=200)
+def test_label_prefix_does_not_change_result(expr, label):
+    """Prepending a text label should not change the numeric result."""
+    r_plain, _ = evaluate_line(expr, {})
+    assume(r_plain is not None)
+    r_labeled, _ = evaluate_line(f"{label} {expr}", {})
+    assert r_labeled is not None, (
+        f"'{label} {expr}' returned None but '{expr}' returned {r_plain}"
+    )
+    assert r_plain == r_labeled, (
+        f"'{label} {expr}' = {r_labeled}, but '{expr}' = {r_plain}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 11. Trailing parenthetical annotation invariance
+# ---------------------------------------------------------------------------
+
+_annotations = st.sampled_from(["(note)", "(monthly)", "(see docs)", "(estimated)"])
+
+
+@given(expr=simple_expressions(), annotation=_annotations)
+@settings(max_examples=200)
+def test_trailing_annotation_does_not_change_result(expr, annotation):
+    """Trailing parenthetical annotation should not change the numeric result."""
+    r_plain, _ = evaluate_line(expr, {})
+    assume(r_plain is not None)
+    r_annotated, _ = evaluate_line(f"{expr} {annotation}", {})
+    assert r_annotated is not None, (
+        f"'{expr} {annotation}' returned None but '{expr}' returned {r_plain}"
+    )
+    assert r_plain == r_annotated, (
+        f"'{expr} {annotation}' = {r_annotated}, but '{expr}' = {r_plain}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 12. classify_line / evaluate_line consistency
+# ---------------------------------------------------------------------------
+
+
+@given(expr=simple_expressions())
+@settings(max_examples=200)
+def test_classify_evaluate_consistency(expr):
+    """If evaluate_line returns a result, classify_line should have active tokens."""
+    result, _ = evaluate_line(expr, {})
+    cls = classify_line(expr, {})
+    if result is not None:
+        assert not isinstance(cls, str), (
+            f"evaluate returned {result} but classify returned '{cls}' for '{expr}'"
+        )
+        has_active = any(not dim for _, _, dim in cls)
+        assert has_active, (
+            f"evaluate returned {result} but classify has no active tokens for '{expr}'"
+        )
+
+
+# ---------------------------------------------------------------------------
+# 13. Percentage identity: a + 0% == a
+# ---------------------------------------------------------------------------
+
+
+@given(a=sane_decimals)
+@settings(max_examples=200)
+def test_percentage_zero_identity(a):
+    """a + 0% == a."""
+    s = decimal_to_str(a)
+    result, _ = evaluate_line(f"{s} + 0%", {})
+    assert result is not None
+    assert result == a, f"{s} + 0% = {result}, expected {a}"
+
+
+# ---------------------------------------------------------------------------
+# 14. Variable assignment roundtrip
+# ---------------------------------------------------------------------------
+
+
+@given(a=sane_decimals)
+@settings(max_examples=200)
+def test_variable_roundtrip(a):
+    """Assigning a value to a variable and reading it back gives the same value."""
+    s = decimal_to_str(a)
+    result, new_vars = evaluate_line(f"x = {s}", {})
+    assert result is not None
+    r2, _ = evaluate_line("x + 0", new_vars)
+    assert r2 is not None
+    assert r2 == result, f"assigned x={result}, but x+0={r2}"
+
+
+# ---------------------------------------------------------------------------
+# 15. Parenthesized expression equivalence
+# ---------------------------------------------------------------------------
+
+
+@given(a=sane_decimals, b=sane_decimals)
+@settings(max_examples=200)
+def test_parenthesized_expression_equivalence(a, b):
+    """(a) + (b) == a + b."""
+    sa, sb = decimal_to_str(a), decimal_to_str(b)
+    r1, _ = evaluate_line(f"{sa} + {sb}", {})
+    r2, _ = evaluate_line(f"({sa}) + ({sb})", {})
+    assert r1 is not None
+    assert r2 is not None
+    assert r1 == r2, f"{sa}+{sb}={r1} but ({sa})+({sb})={r2}"

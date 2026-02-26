@@ -23,5 +23,20 @@
 
   {"text": "(2025-03-01 - 2025-01-01) * 24", "variables": {}, "expected": 1416.0},
   {"text": "(2025-03-01 - 2025-01-01) days in hr", "variables": {}, "expected": 1416.0},
-  {"text": "(2025-01-15 + 3 days)", "variables": {}, "expected": "2025-01-18"}
+  {"text": "(2025-01-15 + 3 days)", "variables": {}, "expected": "2025-01-18"},
+
+  {"note": "nested functions", "text": "sqrt(abs(-16))", "variables": {}, "expected": 4.0},
+  {"note": "multi-arg with nested functions", "text": "max(sqrt(4), sqrt(9))", "variables": {}, "expected": 3.0},
+  {"note": "expression inside function", "text": "sqrt(3^2 + 4^2)", "variables": {}, "expected": 5.0},
+  {"note": "text labels around operators", "text": "price 10 + tax 5", "variables": {}, "expected": 15.0},
+  {"note": "percentage in parens then multiply", "text": "(200 + 10%) * 2", "variables": {}, "expected": 440.0},
+  {"note": "percentage then addition", "text": "200 + 10% + 50", "variables": {}, "expected": 270.0},
+  {"note": "percentage of parenthesized expression", "text": "50% of (200 + 300)", "variables": {}, "expected": 250.0},
+  {"note": "percentage as multiplier", "text": "200 * 10%", "variables": {}, "expected": 20.0},
+  {"note": "SI prefix in expression", "text": "1k + 500", "variables": {}, "expected": 1500.0},
+  {"note": "SI prefix inside function", "text": "sqrt(1M)", "variables": {}, "expected": 1000.0},
+  {"note": "date arithmetic with expression in parens", "text": "2025-01-01 + (2 * 7) days", "variables": {}, "expected": "2025-01-15"},
+  {"note": "negative date difference", "text": "2025-01-01 - 2025-03-01", "variables": {}, "expected": -59.0},
+  {"note": "leap year date + 1 year clamps", "text": "2024-02-29 + 1 year", "variables": {}, "expected": "2025-02-28"},
+  {"note": "leap year date + 4 years preserves", "text": "2024-02-29 + 4 years", "variables": {}, "expected": "2028-02-29"}
 ]
