@@ -165,7 +165,7 @@ header div { display: flex; gap: 8px; }
   <div class="editor-inner">
     <div class="input-wrap">
       <div id="highlight" aria-hidden="true"></div>
-      <textarea id="input" spellcheck="false" placeholder="rent 1500&#10;groceries 200 + 150&#10;utilities 80 + 45&#10;total"></textarea>
+      <textarea id="input" spellcheck="false"></textarea>
     </div>
     <div id="results"></div>
   </div>
@@ -855,11 +855,36 @@ function shareURL() {
   });
 }
 
+const WELCOME = `Write math anywhere. Results appear on the right.
+
+# Monthly Budget
+
+rent 1500
+groceries 200 + 150
+utilities 80 + 45
+total
+
+# Variables and percentages
+
+income = 5000
+tax = income * 22%
+after_tax = income - tax
+
+# Unit conversions
+
+5 km in miles
+100 C in F
+
+Try editing these lines, or click New for a blank sheet.
+Click Docs for more features (functions, formatting, etc.)
+`;
+
 loadFromHash().then((hadHash) => {
   if (!input.value && !hadHash) {
     try {
       const saved = localStorage.getItem("calced-input");
       if (saved) { input.value = saved; render(); }
+      else if (saved === null) { input.value = WELCOME; render(); }
     } catch(e) {}
   }
 });
