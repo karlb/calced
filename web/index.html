@@ -796,6 +796,7 @@ function render() {
 }
 
 input.addEventListener("input", render);
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !cheatsheet.hidden) toggleDocs(); });
 
 // --- URL Hash Encoding ---
 let hashTimer = null;
