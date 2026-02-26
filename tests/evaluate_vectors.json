@@ -65,5 +65,10 @@
 
   {"note": "compound date: 4 segments", "text": "2025-01-01 + 1 day + 1 week + 1 month + 1 year", "variables": {}, "expected": "2026-02-09"},
   {"note": "compound date: same unit twice", "text": "2025-01-01 + 1 week + 1 week", "variables": {}, "expected": "2025-01-15"},
-  {"note": "compound date: expression in second segment", "text": "2025-01-01 + 1 week + 2 * 3 days", "variables": {}, "expected": "2025-01-14"}
+  {"note": "compound date: expression in second segment", "text": "2025-01-01 + 1 week + 2 * 3 days", "variables": {}, "expected": "2025-01-14"},
+
+  {"note": "as % of basic", "text": "10 as % of 50", "variables": {}, "expected": 20.0},
+  {"note": "as % of with expressions", "text": "25 as % of (50 + 50)", "variables": {}, "expected": 25.0},
+  {"note": "as % of with variable", "text": "x as % of 200", "variables": {"x": 50}, "expected": 25.0},
+  {"note": "as % of greater than 100", "text": "150 as % of 100", "variables": {}, "expected": 150.0}
 ]

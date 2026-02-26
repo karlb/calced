@@ -380,6 +380,8 @@ def tokenize(text):
                 tokens.append((DATE, _resolve_date_keyword(wl), start, end))
             elif wl == "of":
                 tokens.append(("OF", "of", start, end))
+            elif wl == "as":
+                tokens.append(("AS", "as", start, end))
             elif wl in ("total", "sum"):
                 tokens.append(("TOTAL", wl, start, end))
             elif wl in BUILTIN_FUNC_NAMES:
@@ -564,6 +566,19 @@ class Parser:
             else:
                 right = self.parse_term()
                 left = left + right if op == "+" else left - right
+        # Handle "X as % of Y" → (X / Y) * 100
+        if (self.peek()[0] == "AS"
+                and self.pos + 2 < len(self.tokens)
+                and self.tokens[self.pos + 1][0] == "MULOP"
+                and self.tokens[self.pos + 1][1] == "%"
+                and self.tokens[self.pos + 2][0] == "OF"):
+            self.consume()  # AS
+            self.consume()  # %
+            self.consume()  # OF
+            right = self.parse_expr()
+            if right == 0:
+                raise ZeroDivisionError
+            left = left / right * 100
         return left
 
     def parse_term(self):

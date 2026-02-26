@@ -12,7 +12,7 @@ Spreadsheets are overkill for quick calculations. REPLs lose context once you cl
 
 Compared to other notepad calculators:
 
-- **Tiny, no dependencies** — the CLI is a single 46KB Python file (stdlib only), the web app is a single 51KB HTML file. No build step, no node_modules, no Electron.
+- **Tiny, no dependencies** — the CLI is a single 47KB Python file (stdlib only), the web app is a single 52KB HTML file. No build step, no node_modules, no Electron.
 - **Works offline** — both versions run entirely locally. Save the HTML file or install the CLI and you're set.
 - **Both CLI and web** — same syntax, same test suite, but well adapted to each environment.
 - **Stable results** — shared web URLs include the major version, so they won't break on updates. Files store results inline. All configuration is inside the documents.
@@ -137,14 +137,16 @@ run_calced("""
 50% of 300
 200 + 15%
 200 - 10%
+10 as % of 50
 """)
 ]]] -->
 ```
 50% of 300                              # => 150
 200 + 15%                               # => 230
 200 - 10%                               # => 180
+10 as % of 50                           # => 20
 ```
-<sub>[Try in web app](https://calced.karl.berlin/0/#MzVQVchPUzA2MOAyMjBQ0FYwNFUFs3QVDA1UuQA)</sub>
+<sub>[Try in web app](https://calced.karl.berlin/0/#MzVQVchPUzA2MOAyMjBQ0FYwNFUFs3QVDA1UuQwNFBKLFcBKTA24AA)</sub>
 <!-- [[[end]]] -->
 
 ### SI prefixes

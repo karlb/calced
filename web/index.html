@@ -411,6 +411,7 @@ function tokenize(text) {
       const end = i + wm[0].length;
       if (DATE_KEYWORDS.has(wl)) tokens.push(["DATE", _resolveDateKeyword(wl), start, end]);
       else if (wl === "of") tokens.push(["OF", "of", start, end]);
+      else if (wl === "as") tokens.push(["AS", "as", start, end]);
       else if (wl === "total" || wl === "sum") tokens.push(["TOTAL", wl, start, end]);
       else if (BUILTIN_FUNC_NAMES.has(wl)) tokens.push(["FUNC", wl, start, end]);
       else tokens.push(["WORD", word, start, end]);
@@ -439,6 +440,18 @@ class Parser {
         const right = this.parseTerm();
         left = op === "+" ? left.plus(right) : left.minus(right);
       }
+    }
+    // Handle "X as % of Y" → (X / Y) * 100
+    if (this.peek()[0] === "AS"
+        && this.pos + 2 < this.tokens.length
+        && this.tokens[this.pos + 1][0] === "MULOP" && this.tokens[this.pos + 1][1] === "%"
+        && this.tokens[this.pos + 2][0] === "OF") {
+      this.consume(); // AS
+      this.consume(); // %
+      this.consume(); // OF
+      const right = this.parseExpr();
+      if (right.eq(0)) throw new Error("division by zero");
+      left = left.div(right).times(100);
     }
     return left;
   }

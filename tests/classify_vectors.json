@@ -117,5 +117,11 @@
     "text": "2*3 (note)",
     "variables": {},
     "expected": [[0,1,false],[1,2,false],[2,3,false],[3,4,true],[4,5,true],[5,9,true],[9,10,true]]
+  },
+  {
+    "note": "as % of highlights all tokens",
+    "text": "10 as % of 50",
+    "variables": {},
+    "expected": [[0,2,false],[2,3,true],[3,5,false],[5,6,true],[6,7,false],[7,8,true],[8,10,false],[10,11,true],[11,13,false]]
   }
 ]
