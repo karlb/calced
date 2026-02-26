@@ -113,6 +113,7 @@ header div { display: flex; gap: 8px; }
 <header>
   <h1><a href=""><svg width="1.2em" height="1.2em" viewBox="0 0 64 64" style="vertical-align:-0.15em"><rect width="64" height="64" rx="14" fill="#2563eb"/><rect x="11" y="18" width="20" height="5" rx="2.5" fill="white" opacity=".4"/><rect x="11" y="30" width="14" height="5" rx="2.5" fill="white" opacity=".4"/><rect x="11" y="42" width="22" height="5" rx="2.5" fill="white" opacity=".4"/><rect x="39" y="18" width="14" height="5" rx="2.5" fill="white"/><rect x="43" y="30" width="10" height="5" rx="2.5" fill="white"/><rect x="37" y="42" width="16" height="5" rx="2.5" fill="white"/></svg> calced</a></h1>
   <div>
+    <a class="header-link" href="#new" target="_blank">New</a>
     <button class="header-link" id="docs-btn" onclick="toggleDocs()">Docs &#x25BE;</button>
     <button id="share-btn" onclick="shareURL()">Share</button>
   </div>
@@ -785,6 +786,7 @@ function render() {
     resLines[i].style.height = hlLines[i].offsetHeight + 'px';
   }
   scheduleHashUpdate();
+  try { localStorage.setItem("calced-input", text); } catch(e) {}
 }
 
 input.addEventListener("input", render);
@@ -831,13 +833,18 @@ async function updateHash() {
 
 async function loadFromHash() {
   const hash = location.hash.slice(1);
-  if (!hash) return;
+  if (!hash) return false;
+  if (hash === "new") {
+    history.replaceState(null, "", location.pathname);
+    return true;
+  }
   try {
     input.value = await decompressText(hash);
     render();
   } catch (e) {
     console.error("Failed to decode URL hash:", e);
   }
+  return true;
 }
 
 function shareURL() {
@@ -848,7 +855,14 @@ function shareURL() {
   });
 }
 
-loadFromHash();
+loadFromHash().then((hadHash) => {
+  if (!input.value && !hadHash) {
+    try {
+      const saved = localStorage.getItem("calced-input");
+      if (saved) { input.value = saved; render(); }
+    } catch(e) {}
+  }
+});
 </script>
 </body>
 </html>
