@@ -145,14 +145,10 @@ class TestEvaluate(unittest.TestCase):
 
     # --- Known limitations: document current behavior ---
 
-    def test_leading_paren_label_returns_none(self):
-        """(label) before expression currently returns None.
-
-        Known limitation: _build_math keeps LPAREN/RPAREN but skips the WORD
-        inside, creating empty parens () that the parser can't handle.
-        """
+    def test_leading_paren_label_evaluates(self):
+        """(label) before expression evaluates the numeric part."""
         r, _ = evaluate_line("(just) 100", {})
-        self.assertIsNone(r)
+        self.assertEqual(r, 100)
 
     def test_pct_then_multiply_returns_none(self):
         """200 + 10% * 2 currently returns None.
@@ -165,16 +161,10 @@ class TestEvaluate(unittest.TestCase):
         r, _ = evaluate_line("200 + 10% * 2", {})
         self.assertIsNone(r)
 
-    def test_compound_date_durations_fall_through(self):
-        """2025-01-01 + 1 week + 3 days falls through to plain arithmetic.
-
-        Known limitation: the date pattern matcher only supports a single
-        duration unit. Compound durations like '1 week + 3 days' fail
-        pattern matching and fall through to arithmetic (1 + 3 = 4).
-        """
+    def test_compound_date_durations(self):
+        """2025-01-01 + 1 week + 3 days evaluates as compound date math."""
         r, _ = evaluate_line("2025-01-01 + 1 week + 3 days", {})
-        # Currently evaluates as 1 + 3 = 4 (plain arithmetic fallthrough)
-        self.assertEqual(r, 4)
+        self.assertEqual(r, datetime.date(2025, 1, 11))
 
 
 if __name__ == "__main__":

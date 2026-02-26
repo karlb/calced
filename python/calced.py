@@ -702,6 +702,25 @@ def _build_math(tokens, start, conv_start, eof_idx, all_vars):
                 paren_depth -= 1
             math_tokens.append(t)
             math_to_orig.append(idx)
+    # Strip empty parentheses left behind when WORDs inside parens are skipped
+    changed = True
+    while changed:
+        changed = False
+        new_tokens = []
+        new_orig = []
+        i = 0
+        while i < len(math_tokens):
+            if (i + 1 < len(math_tokens)
+                    and math_tokens[i][0] == "LPAREN"
+                    and math_tokens[i + 1][0] == "RPAREN"):
+                i += 2
+                changed = True
+            else:
+                new_tokens.append(math_tokens[i])
+                new_orig.append(math_to_orig[i])
+                i += 1
+        math_tokens = new_tokens
+        math_to_orig = new_orig
     return math_tokens, math_to_orig
 
 
@@ -848,51 +867,69 @@ def _try_date_eval_inner(tokens, variables):
             return _finish(Decimal(diff_days) / Decimal(7))
         return _finish(Decimal(diff_days))
 
-    # Pattern 2: DATE ± expr duration_unit
+    # Pattern 2: DATE ± expr duration_unit (supports compound: + 1 week + 3 days)
     if (
         len(body) >= 4
         and body[0][0] == DATE
         and body[1][0] == "ADDOP"
-        and body[-1][0] == "WORD"
-        and body[-1][1].lower() in DURATION_UNITS
     ):
-        d = body[0][1]
-        op = body[1][1]
-        unit = body[-1][1].lower()
-        # Build math tokens for the numeric part between op and unit
-        math_toks = body[2:-1]
-        if not math_toks:
-            return None
-        # Resolve variables in math tokens
-        resolved_math = []
         all_vars = {**BUILTIN_CONSTS, **variables}
-        for t in math_toks:
-            if t[0] == "WORD":
-                wl = t[1].lower()
-                if wl in all_vars and not isinstance(all_vars[wl], datetime.date):
-                    resolved_math.append(("NUM", all_vars[wl], t[2], t[3]))
+        d = body[0][1]
+        pos = 1
+        while pos < len(body) and body[pos][0] == "ADDOP":
+            op = body[pos][1]
+            pos += 1
+            # Find the next DURATION_WORD to determine segment end
+            dur_pos = None
+            for j in range(pos, len(body)):
+                if (body[j][0] == "WORD"
+                        and body[j][1].lower() in DURATION_UNITS):
+                    dur_pos = j
+                    break
+            if dur_pos is None:
+                break  # no duration unit found, fall through
+            unit = body[dur_pos][1].lower()
+            math_toks = body[pos:dur_pos]
+            if not math_toks:
+                break
+            # Resolve variables in math tokens
+            resolved_math = []
+            for t in math_toks:
+                if t[0] == "WORD":
+                    wl = t[1].lower()
+                    if wl in all_vars and not isinstance(all_vars[wl], datetime.date):
+                        resolved_math.append(("NUM", all_vars[wl], t[2], t[3]))
+                    else:
+                        break  # can't resolve
                 else:
-                    return None  # can't resolve
+                    resolved_math.append(t)
             else:
-                resolved_math.append(t)
-        resolved_math.append(("EOF", None, 0, 0))
-        n_val, _ = _try_parse(resolved_math)
-        if n_val is None:
-            return None
-        n = int(n_val)
-        if op == "-":
-            n = -n
-        if unit in ("day", "days"):
-            result = d + datetime.timedelta(days=n)
-        elif unit in ("week", "weeks"):
-            result = d + datetime.timedelta(weeks=n)
-        elif unit in ("month", "months"):
-            result = _add_months(d, n)
-        elif unit in ("year", "years"):
-            result = _add_months(d, n * 12)
+                resolved_math.append(("EOF", None, 0, 0))
+                n_val, _ = _try_parse(resolved_math)
+                if n_val is None:
+                    break
+                n = int(n_val)
+                if op == "-":
+                    n = -n
+                if unit in ("day", "days"):
+                    d = d + datetime.timedelta(days=n)
+                elif unit in ("week", "weeks"):
+                    d = d + datetime.timedelta(weeks=n)
+                elif unit in ("month", "months"):
+                    d = _add_months(d, n)
+                elif unit in ("year", "years"):
+                    d = _add_months(d, n * 12)
+                else:
+                    break
+                pos = dur_pos + 1
+                continue
+            break  # for-else break path
         else:
-            return None
-        return _finish(result)
+            # Loop ended because pos >= len(body) — all tokens consumed
+            return _finish(d)
+        # Check if we consumed all tokens via the continue path
+        if pos >= len(body):
+            return _finish(d)
 
     # Pattern 3: DATE - DATE → number of days
     if (

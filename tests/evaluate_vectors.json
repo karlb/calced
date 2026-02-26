@@ -38,5 +38,13 @@
   {"note": "date arithmetic with expression in parens", "text": "2025-01-01 + (2 * 7) days", "variables": {}, "expected": "2025-01-15"},
   {"note": "negative date difference", "text": "2025-01-01 - 2025-03-01", "variables": {}, "expected": -59.0},
   {"note": "leap year date + 1 year clamps", "text": "2024-02-29 + 1 year", "variables": {}, "expected": "2025-02-28"},
-  {"note": "leap year date + 4 years preserves", "text": "2024-02-29 + 4 years", "variables": {}, "expected": "2028-02-29"}
+  {"note": "leap year date + 4 years preserves", "text": "2024-02-29 + 4 years", "variables": {}, "expected": "2028-02-29"},
+
+  {"note": "parenthesized label before number", "text": "(just) 100", "variables": {}, "expected": 100.0},
+  {"note": "parenthesized label with expression", "text": "(note) 100 + 50", "variables": {}, "expected": 150.0},
+  {"note": "trailing parenthesized label on labeled value", "text": "rent (monthly) 1500", "variables": {}, "expected": 1500.0},
+
+  {"note": "compound date: week + days", "text": "2025-01-01 + 1 week + 3 days", "variables": {}, "expected": "2025-01-11"},
+  {"note": "compound date: month + days", "text": "2025-01-01 + 1 month + 15 days", "variables": {}, "expected": "2025-02-16"},
+  {"note": "compound date: subtract week and days", "text": "2025-01-15 - 1 week - 3 days", "variables": {}, "expected": "2025-01-05"}
 ]

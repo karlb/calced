@@ -560,7 +560,26 @@ function _buildMath(tokens, start, convStart, eofIdx, allVars) {
       mathToOrig.push(idx);
     }
   }
-  return [mathTokens, mathToOrig];
+  // Strip empty parentheses left behind when WORDs inside parens are skipped
+  let mt = mathTokens, mo = mathToOrig, changed = true;
+  while (changed) {
+    changed = false;
+    const nt = [], no = [];
+    let i = 0;
+    while (i < mt.length) {
+      if (i + 1 < mt.length && mt[i][0] === "LPAREN" && mt[i + 1][0] === "RPAREN") {
+        i += 2;
+        changed = true;
+      } else {
+        nt.push(mt[i]);
+        no.push(mo[i]);
+        i++;
+      }
+    }
+    mt = nt;
+    mo = no;
+  }
+  return [mt, mo];
 }
 
 function _tryParse(mathTokens) {
@@ -674,43 +693,57 @@ function _tryDateEvalInner(tokens, variables) {
     return _finish(new Big(diffDays));
   }
 
-  // Pattern 2: DATE ± expr duration_unit
+  // Pattern 2: DATE ± expr duration_unit (supports compound: + 1 week + 3 days)
   if (body.length >= 4
       && body[0][0] === "DATE"
-      && body[1][0] === "ADDOP"
-      && body[body.length - 1][0] === "WORD"
-      && DURATION_UNITS.has(body[body.length - 1][1].toLowerCase())) {
-    const d = body[0][1];
-    const op = body[1][1];
-    const unit = body[body.length - 1][1].toLowerCase();
-    const midTokens = body.slice(2, body.length - 1);
-    if (!midTokens.length) return null;
-    // Resolve variables in mid tokens
+      && body[1][0] === "ADDOP") {
     const allVars = Object.create(null);
     for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
     for (const k in variables) allVars[k] = variables[k];
-    const resolvedMid = [];
-    for (const t of midTokens) {
-      if (t[0] === "WORD") {
-        const wl = t[1].toLowerCase();
-        if (wl in allVars && !_isDateObj(allVars[wl])) {
-          const v = allVars[wl];
-          resolvedMid.push(["NUM", v instanceof Big ? v : new Big(v), t[2], t[3]]);
-        } else return null;
-      } else resolvedMid.push(t);
+    let d = body[0][1];
+    let pos = 1;
+    let ok = true;
+    while (pos < body.length && body[pos][0] === "ADDOP") {
+      const op = body[pos][1];
+      pos++;
+      // Find next DURATION_WORD
+      let durPos = -1;
+      for (let j = pos; j < body.length; j++) {
+        if (body[j][0] === "WORD" && DURATION_UNITS.has(body[j][1].toLowerCase())) {
+          durPos = j;
+          break;
+        }
+      }
+      if (durPos < 0) { ok = false; break; }
+      const unit = body[durPos][1].toLowerCase();
+      const midTokens = body.slice(pos, durPos);
+      if (!midTokens.length) { ok = false; break; }
+      // Resolve variables
+      const resolvedMid = [];
+      let resolved = true;
+      for (const t of midTokens) {
+        if (t[0] === "WORD") {
+          const wl = t[1].toLowerCase();
+          if (wl in allVars && !_isDateObj(allVars[wl])) {
+            const v = allVars[wl];
+            resolvedMid.push(["NUM", v instanceof Big ? v : new Big(v), t[2], t[3]]);
+          } else { resolved = false; break; }
+        } else resolvedMid.push(t);
+      }
+      if (!resolved) { ok = false; break; }
+      resolvedMid.push(["EOF", null, 0, 0]);
+      const [nVal] = _tryParse(resolvedMid);
+      if (nVal === null) { ok = false; break; }
+      let n = Math.round(nVal.toNumber());
+      if (op === "-") n = -n;
+      if (unit === "day" || unit === "days") d = _dateAddDays(d, n);
+      else if (unit === "week" || unit === "weeks") d = _dateAddDays(d, n * 7);
+      else if (unit === "month" || unit === "months") d = _dateAddMonths(d, n);
+      else if (unit === "year" || unit === "years") d = _dateAddMonths(d, n * 12);
+      else { ok = false; break; }
+      pos = durPos + 1;
     }
-    resolvedMid.push(["EOF", null, 0, 0]);
-    const [nVal] = _tryParse(resolvedMid);
-    if (nVal === null) return null;
-    let n = Math.round(nVal.toNumber());
-    if (op === "-") n = -n;
-    let result;
-    if (unit === "day" || unit === "days") result = _dateAddDays(d, n);
-    else if (unit === "week" || unit === "weeks") result = _dateAddDays(d, n * 7);
-    else if (unit === "month" || unit === "months") result = _dateAddMonths(d, n);
-    else if (unit === "year" || unit === "years") result = _dateAddMonths(d, n * 12);
-    else return null;
-    return _finish(result);
+    if (ok && pos >= body.length) return _finish(d);
   }
 
   // Pattern 3: DATE - DATE → number of days

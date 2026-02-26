@@ -62,11 +62,23 @@ answer sqrt(16)                         # => 4
 1500 (monthly rent)                     # => 1_500
 100 (plus tax)                          # => 100
 
+# Parenthesized Text Labels
+
+(just) 100                              # => 100
+(note) 100 + 50                         # => 150
+rent (monthly) 1500                     # => 1_500
+
 # Date Arithmetic with Expressions
 
 2025-01-01 + (2 * 7) days               # => 2025-01-15
 2025-01-01 + 0 days                     # => 2025-01-01
 2025-01-01 - 2025-03-01                 # => -59
+
+# Compound Date Durations
+
+2025-01-01 + 1 week + 3 days            # => 2025-01-11
+2025-01-01 + 1 month + 15 days          # => 2025-02-16
+2025-01-15 - 1 week - 3 days            # => 2025-01-05
 
 # Leap Year Dates
 
