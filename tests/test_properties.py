@@ -1,13 +1,24 @@
-"""Property-based tests for calced using Hypothesis."""
+"""Property-based tests for calced using Hypothesis.
 
+Run with: make test-property
+(Not discovered by unittest — requires pytest + hypothesis.)
+"""
+
+import datetime
 import sys
 import os
+
+try:
+    import pytest
+    from hypothesis import given, assume, settings, example
+    from hypothesis import strategies as st
+except ImportError:
+    # Skip entirely when discovered by unittest (which lacks these deps).
+    import unittest
+    raise unittest.SkipTest("requires pytest and hypothesis")
+
 from decimal import Decimal, InvalidOperation
 from itertools import combinations
-
-import pytest
-from hypothesis import given, assume, settings, example
-from hypothesis import strategies as st
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 from calced import (
@@ -281,7 +292,7 @@ def test_evaluate_line_never_crashes(text):
     """evaluate_line() should never raise on arbitrary input."""
     result, variables = evaluate_line(text, {})
     assert isinstance(variables, dict)
-    assert result is None or isinstance(result, (Decimal, str))
+    assert result is None or isinstance(result, (Decimal, str, datetime.date))
 
 
 # ---------------------------------------------------------------------------

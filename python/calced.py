@@ -3,6 +3,8 @@
 
 import argparse
 import base64
+import calendar
+import datetime
 import difflib
 import importlib.metadata
 import json
@@ -18,6 +20,33 @@ RESULT_RE = re.compile(r"\s{2,}# => .*$")
 DIRECTIVE_RE = re.compile(r"^@(format|separator)\s*=\s*(.+)$", re.IGNORECASE)
 FORMAT_RE = re.compile(r"^(minSig|fixed|scientific|auto)(?:\((\d+)\))?$", re.IGNORECASE)
 RATE_RE = re.compile(r"^@rate\s+(\w+)/(\w+)\s*=\s*(.+)$", re.IGNORECASE)
+
+# --- Date/time support ---
+DATE = "DATE"
+ISO_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+DATE_KEYWORDS = {"today", "tomorrow", "yesterday"}
+DURATION_UNITS = {"day", "days", "week", "weeks", "month", "months", "year", "years"}
+
+
+def _resolve_date_keyword(keyword):
+    """Return a datetime.date for a date keyword."""
+    today = datetime.date.today()
+    if keyword == "today":
+        return today
+    if keyword == "tomorrow":
+        return today + datetime.timedelta(days=1)
+    if keyword == "yesterday":
+        return today - datetime.timedelta(days=1)
+    raise ValueError(f"Unknown date keyword: {keyword}")
+
+
+def _add_months(d, months):
+    """Add months to a date, clamping day to valid range."""
+    month = d.month - 1 + months
+    year = d.year + month // 12
+    month = month % 12 + 1
+    max_day = calendar.monthrange(year, month)[1]
+    return datetime.date(year, month, min(d.day, max_day))
 
 # SI prefixes (case-sensitive: M=mega, m=milli)
 SI_PREFIX = {
@@ -260,6 +289,18 @@ def tokenize(text):
 
         start = i
 
+        # ISO date: 2025-01-15 (must check before number parsing)
+        if text[i].isdigit():
+            dm = ISO_DATE_RE.match(text, i)
+            if dm:
+                try:
+                    d = datetime.date.fromisoformat(dm.group())
+                    tokens.append((DATE, d, start, dm.end()))
+                    i = dm.end()
+                    continue
+                except ValueError:
+                    pass  # fall through to number parsing
+
         # Hex/binary/octal: 0xFF, 0b1010, 0o77
         if text[i] == "0" and i + 1 < n and text[i + 1] in "xXbBoO":
             m = re.match(r"0[xX][0-9a-fA-F]+|0[bB][01]+|0[oO][0-7]+", text[i:])
@@ -335,7 +376,9 @@ def tokenize(text):
             word = m.group()
             wl = word.lower()
             end = i + m.end()
-            if wl == "of":
+            if wl in DATE_KEYWORDS:
+                tokens.append((DATE, _resolve_date_keyword(wl), start, end))
+            elif wl == "of":
                 tokens.append(("OF", "of", start, end))
             elif wl in ("total", "sum"):
                 tokens.append(("TOTAL", wl, start, end))
@@ -378,8 +421,16 @@ def classify_line(text, variables, rates=None):
     tokens = tokenize(text)
     all_names = set(BUILTIN_CONSTS) | set(variables or {})
 
+    has_date = any(t[0] == DATE for t in tokens if t[0] != "EOF")
+    # Also check for date variables
+    if not has_date and variables:
+        for t in tokens:
+            if t[0] == "WORD" and isinstance((variables or {}).get(t[1].lower()), datetime.date):
+                has_date = True
+                break
+
     has_math = any(
-        t[0] in ("NUM", "PCT", "FUNC", "TOTAL")
+        t[0] in ("NUM", "PCT", "FUNC", "TOTAL", DATE)
         or (t[0] == "WORD" and t[1].lower() in all_names)
         for t in tokens
         if t[0] != "EOF"
@@ -387,7 +438,15 @@ def classify_line(text, variables, rates=None):
 
     active = set()
 
-    if has_math:
+    if has_date and has_math:
+        # If it's a date expression, mark all non-EOF tokens as active
+        date_result = _try_date_eval(tokens, variables or {})
+        if date_result is not None:
+            for idx, t in enumerate(tokens):
+                if t[0] != "EOF":
+                    active.add(idx)
+        # else fall through to normal classification
+    if has_math and not active:
         if any(t[0] == "TOTAL" for t in tokens if t[0] != "EOF"):
             for idx, t in enumerate(tokens):
                 if t[0] == "TOTAL":
@@ -627,10 +686,10 @@ def _build_math(tokens, start, conv_start, eof_idx, all_vars):
             continue
         if t[0] == "WORD":
             wl = t[1].lower()
-            if wl in all_vars:
+            if wl in all_vars and not isinstance(all_vars[wl], datetime.date):
                 math_tokens.append(("NUM", all_vars[wl], t[2], t[3]))
                 math_to_orig.append(idx)
-        elif t[0] == "EQ":
+        elif t[0] in ("EQ", DATE):
             pass
         elif t[0] == "COMMA" and paren_depth == 0:
             pass
@@ -673,6 +732,145 @@ def _try_parse(math_tokens):
         return None, -1
 
 
+def _try_date_eval(tokens, variables):
+    """Try to evaluate a date expression. Returns (result, variables) or None.
+
+    Patterns:
+    1. days until/since DATE → number
+    2. DATE ± N duration_unit → date
+    3. DATE - DATE → number (days)
+    """
+    try:
+        return _try_date_eval_inner(tokens, variables)
+    except Exception:
+        return None
+
+
+def _try_date_eval_inner(tokens, variables):
+    # Resolve date-holding variables: replace WORD tokens whose variable is a date
+    resolved = []
+    for t in tokens:
+        if t[0] == "WORD":
+            wl = t[1].lower()
+            val = variables.get(wl)
+            if isinstance(val, datetime.date):
+                resolved.append((DATE, val, t[2], t[3]))
+                continue
+        resolved.append(t)
+
+    # Check if there are any DATE tokens
+    if not any(t[0] == DATE for t in resolved):
+        return None
+
+    # Strip assignment prefix
+    var_name = None
+    toks = resolved
+    if len(toks) >= 3 and toks[0][0] == "WORD" and toks[1][0] == "EQ":
+        var_name = toks[0][1].lower()
+        toks = toks[2:]
+
+    # Filter out EOF for pattern matching
+    body = [t for t in toks if t[0] != "EOF"]
+    if not body:
+        return None
+
+    # Strip outer parentheses
+    while (
+        len(body) >= 2
+        and body[0][0] == "LPAREN"
+        and body[-1][0] == "RPAREN"
+    ):
+        body = body[1:-1]
+    if not body:
+        return None
+
+    def _finish(result):
+        if var_name:
+            return result, {**variables, var_name: result}
+        return result, variables
+
+    # Pattern 0: bare DATE (e.g., "today", "2025-01-15")
+    if len(body) == 1 and body[0][0] == DATE:
+        return _finish(body[0][1])
+
+    # Pattern 1: "days/weeks until/since DATE"
+    if (
+        len(body) == 3
+        and body[0][0] == "WORD"
+        and body[0][1].lower() in ("days", "weeks")
+        and body[1][0] == "WORD"
+        and body[1][1].lower() in ("until", "since")
+        and body[2][0] == DATE
+    ):
+        today = datetime.date.today()
+        direction = body[1][1].lower()
+        target = body[2][1]
+        diff_days = (target - today).days if direction == "until" else (today - target).days
+        if body[0][1].lower() == "weeks":
+            return _finish(Decimal(diff_days) / Decimal(7))
+        return _finish(Decimal(diff_days))
+
+    # Pattern 2: DATE ± expr duration_unit
+    if (
+        len(body) >= 4
+        and body[0][0] == DATE
+        and body[1][0] == "ADDOP"
+        and body[-1][0] == "WORD"
+        and body[-1][1].lower() in DURATION_UNITS
+    ):
+        d = body[0][1]
+        op = body[1][1]
+        unit = body[-1][1].lower()
+        # Build math tokens for the numeric part between op and unit
+        math_toks = body[2:-1]
+        if not math_toks:
+            return None
+        # Resolve variables in math tokens
+        resolved_math = []
+        all_vars = {**BUILTIN_CONSTS, **variables}
+        for t in math_toks:
+            if t[0] == "WORD":
+                wl = t[1].lower()
+                if wl in all_vars and not isinstance(all_vars[wl], datetime.date):
+                    resolved_math.append(("NUM", all_vars[wl], t[2], t[3]))
+                else:
+                    return None  # can't resolve
+            else:
+                resolved_math.append(t)
+        resolved_math.append(("EOF", None, 0, 0))
+        n_val, _ = _try_parse(resolved_math)
+        if n_val is None:
+            return None
+        n = int(n_val)
+        if op == "-":
+            n = -n
+        if unit in ("day", "days"):
+            result = d + datetime.timedelta(days=n)
+        elif unit in ("week", "weeks"):
+            result = d + datetime.timedelta(weeks=n)
+        elif unit in ("month", "months"):
+            result = _add_months(d, n)
+        elif unit in ("year", "years"):
+            result = _add_months(d, n * 12)
+        else:
+            return None
+        return _finish(result)
+
+    # Pattern 3: DATE - DATE → number of days
+    if (
+        len(body) == 3
+        and body[0][0] == DATE
+        and body[1][0] == "ADDOP"
+        and body[1][1] == "-"
+        and body[2][0] == DATE
+    ):
+        d1 = body[0][1]
+        d2 = body[2][1]
+        return _finish(Decimal((d1 - d2).days))
+
+    return None
+
+
 def evaluate_line(text, variables, rates=None):
     """Evaluate a line. Returns (result, variables) or (None, variables)."""
     tokens = tokenize(text)
@@ -680,10 +878,16 @@ def evaluate_line(text, variables, rates=None):
     if any(t[0] == "TOTAL" for t in tokens):
         return "TOTAL", variables
 
+    # Try date evaluation first
+    date_result = _try_date_eval(tokens, variables)
+    if date_result is not None:
+        return date_result
+
     all_vars = {**BUILTIN_CONSTS, **variables}
 
     has_value = any(
-        t[0] in ("NUM", "PCT", "FUNC") or (t[0] == "WORD" and t[1].lower() in all_vars)
+        t[0] in ("NUM", "PCT", "FUNC", DATE)
+        or (t[0] == "WORD" and t[1].lower() in all_vars)
         for t in tokens
     )
     if not has_value:
@@ -715,6 +919,8 @@ def evaluate_line(text, variables, rates=None):
 
 def format_result(n, fmt_opts=None):
     """Format a number according to fmt_opts."""
+    if isinstance(n, datetime.date):
+        return n.isoformat()
     if fmt_opts is None:
         fmt_opts = {"mode": "minSig", "precision": 10, "separator": "underscore"}
     n = float(n)  # Decimal→float for display (float's ~15 digits > max display precision)
@@ -841,7 +1047,7 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
         result, variables = evaluate_line(stripped, variables, rates=rates)
 
         if result == "TOTAL":
-            total = sum(r for r in results_acc if r is not None)
+            total = sum(r for r in results_acc if r is not None and not isinstance(r, datetime.date))
             results_acc.append(total)
             evaluated.append((clean, total, dict(fmt_opts), vars_before))
         elif result is not None:
@@ -982,12 +1188,15 @@ def process_json(content):
         result, variables = evaluate_line(stripped, variables, rates=rates)
 
         if result == "TOTAL":
-            total = sum(r for r in results_acc if r is not None)
+            total = sum(r for r in results_acc if r is not None and not isinstance(r, datetime.date))
             results_acc.append(total)
             output.append({"input": clean, "result": float(total)})
         elif result is not None:
             results_acc.append(result)
-            output.append({"input": clean, "result": float(result)})
+            if isinstance(result, datetime.date):
+                output.append({"input": clean, "result": result.isoformat()})
+            else:
+                output.append({"input": clean, "result": float(result)})
         else:
             results_acc.append(None)
             output.append({"input": clean, "result": None})

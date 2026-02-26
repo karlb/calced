@@ -157,6 +157,12 @@ header div { display: flex; gap: 8px; }
       <div class="cs-ex">50 EUR in USD</div>
     </div>
     <div>
+      <div class="cs-head">Dates <a class="cs-try" onclick="tryExample('dates')">Try</a></div>
+      <div class="cs-ex">today + 2 weeks</div>
+      <div class="cs-ex">2025-12-25 - today</div>
+      <div class="cs-ex">days until 2025-12-31</div>
+    </div>
+    <div>
       <div class="cs-head">Formatting <a class="cs-try" onclick="tryExample('fmt')">Try</a></div>
       <div class="cs-ex">1.5k + 500</div>
       <div class="cs-ex">@format = fixed(2)</div>
@@ -212,6 +218,61 @@ const BUILTIN_FUNCS_N = {
 };
 const BUILTIN_FUNC_NAMES = new Set([...Object.keys(BUILTIN_FUNCS_1), ...Object.keys(BUILTIN_FUNCS_N)]);
 const BUILTIN_CONSTS = { pi: new Big(Math.PI.toString()), e: new Big(Math.E.toString()), tau: new Big((2 * Math.PI).toString()) };
+
+// --- Date/time support ---
+const ISO_DATE_JS_RE = /^\d{4}-\d{2}-\d{2}/;
+const DATE_KEYWORDS = new Set(["today", "tomorrow", "yesterday"]);
+const DURATION_UNITS = new Set(["day", "days", "week", "weeks", "month", "months", "year", "years"]);
+
+function _makeDate(y, m, d) { return { _isDate: true, y, m, d }; }
+function _dateToISO(dt) {
+  const yy = String(dt.y).padStart(4, '0');
+  const mm = String(dt.m).padStart(2, '0');
+  const dd = String(dt.d).padStart(2, '0');
+  return yy + '-' + mm + '-' + dd;
+}
+function _dateFromISO(s) {
+  const parts = s.split('-');
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  // Validate
+  if (m < 1 || m > 12 || d < 1 || d > _daysInMonth(y, m)) return null;
+  return _makeDate(y, m, d);
+}
+function _isDateObj(v) { return v && v._isDate === true; }
+function _daysInMonth(y, m) {
+  return new Date(y, m, 0).getDate();
+}
+function _todayDate() {
+  const now = new Date();
+  return _makeDate(now.getFullYear(), now.getMonth() + 1, now.getDate());
+}
+function _resolveDateKeyword(kw) {
+  const t = _todayDate();
+  if (kw === "today") return t;
+  if (kw === "tomorrow") return _dateAddDays(t, 1);
+  if (kw === "yesterday") return _dateAddDays(t, -1);
+  return null;
+}
+function _dateToJSDate(dt) { return new Date(dt.y, dt.m - 1, dt.d); }
+function _jsDateToDate(jsd) { return _makeDate(jsd.getFullYear(), jsd.getMonth() + 1, jsd.getDate()); }
+function _dateAddDays(dt, n) {
+  const jsd = _dateToJSDate(dt);
+  jsd.setDate(jsd.getDate() + n);
+  return _jsDateToDate(jsd);
+}
+function _dateAddMonths(dt, months) {
+  let m = dt.m - 1 + months;
+  let y = dt.y + Math.floor(m / 12);
+  m = ((m % 12) + 12) % 12 + 1;
+  const maxDay = _daysInMonth(y, m);
+  return _makeDate(y, m, Math.min(dt.d, maxDay));
+}
+function _dateDiffDays(d1, d2) {
+  const ms = _dateToJSDate(d1).getTime() - _dateToJSDate(d2).getTime();
+  return Math.round(ms / 86400000);
+}
 
 // --- Unit conversion tables ---
 const UNIT_TABLE = {
@@ -294,6 +355,19 @@ function tokenize(text) {
     if (text[i] === ' ' || text[i] === '\t') { i++; continue; }
     const start = i;
     const slice = text.substring(i);
+    // ISO date: 2025-01-15
+    if (text[i] >= '0' && text[i] <= '9') {
+      const dm = slice.match(ISO_DATE_JS_RE);
+      if (dm) {
+        const dateObj = _dateFromISO(dm[0]);
+        if (dateObj) {
+          const end = i + dm[0].length;
+          tokens.push(["DATE", dateObj, start, end]);
+          i = end;
+          continue;
+        }
+      }
+    }
     // Hex/binary/octal
     if (text[i] === "0" && i + 1 < n && "xXbBoO".includes(text[i + 1])) {
       const hm = slice.match(HEX_BIN_OCT_RE);
@@ -335,7 +409,8 @@ function tokenize(text) {
       const word = wm[0];
       const wl = word.toLowerCase();
       const end = i + wm[0].length;
-      if (wl === "of") tokens.push(["OF", "of", start, end]);
+      if (DATE_KEYWORDS.has(wl)) tokens.push(["DATE", _resolveDateKeyword(wl), start, end]);
+      else if (wl === "of") tokens.push(["OF", "of", start, end]);
       else if (wl === "total" || wl === "sum") tokens.push(["TOTAL", wl, start, end]);
       else if (BUILTIN_FUNC_NAMES.has(wl)) tokens.push(["FUNC", wl, start, end]);
       else tokens.push(["WORD", word, start, end]);
@@ -469,10 +544,12 @@ function _buildMath(tokens, start, convStart, eofIdx, allVars) {
       const wl = t[1].toLowerCase();
       if (wl in allVars) {
         const v = allVars[wl];
-        mathTokens.push(["NUM", v instanceof Big ? v : new Big(v), t[2], t[3]]);
-        mathToOrig.push(idx);
+        if (!_isDateObj(v)) {
+          mathTokens.push(["NUM", v instanceof Big ? v : new Big(v), t[2], t[3]]);
+          mathToOrig.push(idx);
+        }
       }
-    } else if (t[0] === "EQ") {
+    } else if (t[0] === "EQ" || t[0] === "DATE") {
       // skip
     } else if (t[0] === "COMMA" && parenDepth === 0) {
       // skip
@@ -506,14 +583,128 @@ function _tryParse(mathTokens) {
   }
 }
 
+function _tryDateEval(tokens, variables) {
+  try { return _tryDateEvalInner(tokens, variables); }
+  catch (e) { return null; }
+}
+
+function _tryDateEvalInner(tokens, variables) {
+  // Resolve date-holding variables
+  const resolved = tokens.map(t => {
+    if (t[0] === "WORD") {
+      const wl = t[1].toLowerCase();
+      const val = variables[wl];
+      if (_isDateObj(val)) return ["DATE", val, t[2], t[3]];
+    }
+    return t;
+  });
+  if (!resolved.some(t => t[0] === "DATE")) return null;
+
+  // Strip assignment prefix
+  let varName = null;
+  let toks = resolved;
+  if (toks.length >= 3 && toks[0][0] === "WORD" && toks[1][0] === "EQ") {
+    varName = toks[0][1].toLowerCase();
+    toks = toks.slice(2);
+  }
+  let body = toks.filter(t => t[0] !== "EOF");
+  if (!body.length) return null;
+
+  // Strip outer parentheses
+  while (body.length >= 2 && body[0][0] === "LPAREN" && body[body.length - 1][0] === "RPAREN") {
+    body = body.slice(1, -1);
+  }
+  if (!body.length) return null;
+
+  function _finish(result) {
+    if (varName) {
+      const newVars = Object.create(null);
+      for (const k in variables) newVars[k] = variables[k];
+      newVars[varName] = result;
+      return [result, newVars];
+    }
+    return [result, variables];
+  }
+
+  // Pattern 0: bare DATE
+  if (body.length === 1 && body[0][0] === "DATE") {
+    return _finish(body[0][1]);
+  }
+
+  // Pattern 1: "days/weeks until/since DATE"
+  if (body.length === 3
+      && body[0][0] === "WORD" && (body[0][1].toLowerCase() === "days" || body[0][1].toLowerCase() === "weeks")
+      && body[1][0] === "WORD" && (body[1][1].toLowerCase() === "until" || body[1][1].toLowerCase() === "since")
+      && body[2][0] === "DATE") {
+    const today = _todayDate();
+    const target = body[2][1];
+    const dir = body[1][1].toLowerCase();
+    const diffDays = dir === "until" ? _dateDiffDays(target, today) : _dateDiffDays(today, target);
+    if (body[0][1].toLowerCase() === "weeks") return _finish(new Big(diffDays).div(7));
+    return _finish(new Big(diffDays));
+  }
+
+  // Pattern 2: DATE ± expr duration_unit
+  if (body.length >= 4
+      && body[0][0] === "DATE"
+      && body[1][0] === "ADDOP"
+      && body[body.length - 1][0] === "WORD"
+      && DURATION_UNITS.has(body[body.length - 1][1].toLowerCase())) {
+    const d = body[0][1];
+    const op = body[1][1];
+    const unit = body[body.length - 1][1].toLowerCase();
+    const midTokens = body.slice(2, body.length - 1);
+    if (!midTokens.length) return null;
+    // Resolve variables in mid tokens
+    const allVars = Object.create(null);
+    for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
+    for (const k in variables) allVars[k] = variables[k];
+    const resolvedMid = [];
+    for (const t of midTokens) {
+      if (t[0] === "WORD") {
+        const wl = t[1].toLowerCase();
+        if (wl in allVars && !_isDateObj(allVars[wl])) {
+          const v = allVars[wl];
+          resolvedMid.push(["NUM", v instanceof Big ? v : new Big(v), t[2], t[3]]);
+        } else return null;
+      } else resolvedMid.push(t);
+    }
+    resolvedMid.push(["EOF", null, 0, 0]);
+    const [nVal] = _tryParse(resolvedMid);
+    if (nVal === null) return null;
+    let n = Math.round(nVal.toNumber());
+    if (op === "-") n = -n;
+    let result;
+    if (unit === "day" || unit === "days") result = _dateAddDays(d, n);
+    else if (unit === "week" || unit === "weeks") result = _dateAddDays(d, n * 7);
+    else if (unit === "month" || unit === "months") result = _dateAddMonths(d, n);
+    else if (unit === "year" || unit === "years") result = _dateAddMonths(d, n * 12);
+    else return null;
+    return _finish(result);
+  }
+
+  // Pattern 3: DATE - DATE → number of days
+  if (body.length === 3
+      && body[0][0] === "DATE"
+      && body[1][0] === "ADDOP" && body[1][1] === "-"
+      && body[2][0] === "DATE") {
+    return _finish(new Big(_dateDiffDays(body[0][1], body[2][1])));
+  }
+
+  return null;
+}
+
 function evaluateLine(text, variables, rates) {
   const tokens = tokenize(text);
   if (tokens.some(t => t[0] === "TOTAL")) return ["TOTAL", variables];
+  // Try date evaluation first
+  const dateResult = _tryDateEval(tokens, variables);
+  if (dateResult !== null) return dateResult;
   const allVars = Object.create(null);
   for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
   for (const k in variables) allVars[k] = variables[k];
   const hasValue = tokens.some(t =>
-    t[0] === "NUM" || t[0] === "PCT" || t[0] === "FUNC" || (t[0] === "WORD" && t[1].toLowerCase() in allVars)
+    t[0] === "NUM" || t[0] === "PCT" || t[0] === "FUNC" || t[0] === "DATE" || (t[0] === "WORD" && t[1].toLowerCase() in allVars)
   );
   if (!hasValue) return [null, variables];
   let pos = 0;
@@ -548,6 +739,7 @@ function addCommas(s) {
 }
 
 function formatResult(n, fmtOpts) {
+  if (_isDateObj(n)) return _dateToISO(n);
   if (!fmtOpts) fmtOpts = { mode: "minSig", precision: 10, separator: "underscore" };
   const nf = typeof n.toNumber === "function" ? n.toNumber() : n;
   const mode = fmtOpts.mode;
@@ -602,16 +794,31 @@ function classifyLine(text, variables, rates) {
   for (const k in BUILTIN_CONSTS) allNames.add(k);
   if (variables) { for (const k in variables) allNames.add(k); }
 
+  let hasDate = tokens.some(t => t[0] === "DATE" && t[0] !== "EOF");
+  if (!hasDate && variables) {
+    for (const t of tokens) {
+      if (t[0] === "WORD" && _isDateObj(variables[t[1].toLowerCase()])) { hasDate = true; break; }
+    }
+  }
+
   const hasMath = tokens.some(t =>
     t[0] !== "EOF" && (
-      t[0] === "NUM" || t[0] === "PCT" || t[0] === "FUNC" || t[0] === "TOTAL"
+      t[0] === "NUM" || t[0] === "PCT" || t[0] === "FUNC" || t[0] === "TOTAL" || t[0] === "DATE"
       || (t[0] === "WORD" && allNames.has(t[1].toLowerCase()))
     )
   );
 
   const active = new Set();
 
-  if (hasMath) {
+  if (hasDate && hasMath) {
+    const dateResult = _tryDateEval(tokens, variables || Object.create(null));
+    if (dateResult !== null) {
+      for (let i = 0; i < tokens.length; i++) {
+        if (tokens[i][0] !== "EOF") active.add(i);
+      }
+    }
+  }
+  if (hasMath && active.size === 0) {
     if (tokens.some(t => t[0] === "TOTAL")) {
       for (let i = 0; i < tokens.length; i++) {
         if (tokens[i][0] === "TOTAL") active.add(i);
@@ -734,7 +941,7 @@ function processText(text) {
     const [result, newVars] = evaluateLine(stripped, variables, rates);
     variables = newVars;
     if (result === "TOTAL") {
-      const total = resultsAcc.reduce((s, r) => r !== null ? s.plus(r) : s, new Big(0));
+      const total = resultsAcc.reduce((s, r) => r !== null && !_isDateObj(r) ? s.plus(r) : s, new Big(0));
       resultsAcc.push(total);
       output.push({ result: formatResult(total, { ...fmtOpts }), cls });
     } else if (result !== null) {
@@ -767,6 +974,7 @@ const EXAMPLES = {
   units: "5 km in miles\n100 C in F\n1 gib in mib\n60 min in hr\n1 gal in l",
   funcs: "sqrt(16)\nround(3.14159, 2)\nmin(5, 2, 8)\nmax(1, 9, 3)\nlog10(1000)",
   fmt: "1000000\n\n@format = fixed(2)\n1000000\n\n@format = scientific\n1000000\n\n@separator = comma\n@format = minSig(3)\n1000000",
+  dates: "today + 2 weeks\nyesterday\ntomorrow\n\n# Deadline\ndeadline = 2026-12-31\ndays until deadline\n\n# Date math\n2025-01-31 + 1 month\n2025-03-01 - 2025-01-01",
   rates: "@rate USD/EUR = 0.92\n100 USD in EUR\n50 EUR in USD\n\n@rate BTC/USD = 97500\n0.5 BTC in USD",
 };
 
@@ -798,7 +1006,7 @@ try {
 
 function render() {
   const text = input.value;
-  const cleaned = text.split("\n").map(l => l.replace(RESULT_RE, "").trimEnd()).join("\n");
+  const cleaned = text.split("\n").map(l => l.replace(RESULT_RE, "")).join("\n");
   if (cleaned !== text) input.value = cleaned;
   const lines = cleaned.split("\n");
   const output = processText(cleaned);

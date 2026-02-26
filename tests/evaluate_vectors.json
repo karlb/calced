@@ -9,5 +9,15 @@
   {"text": "foo = 2*3 (see http://example.com)", "variables": {}, "expected": 6.0},
   {"text": "rent 2000 (monthly)", "variables": {}, "expected": 2000.0},
   {"text": "# comment", "variables": {}, "expected": null},
-  {"text": "hello world", "variables": {}, "expected": null}
+  {"text": "hello world", "variables": {}, "expected": null},
+
+  {"text": "2025-01-15 + 3 days", "variables": {}, "expected": "2025-01-18"},
+  {"text": "2025-03-01 - 2025-01-01", "variables": {}, "expected": 59.0},
+  {"text": "2025-01-31 + 1 month", "variables": {}, "expected": "2025-02-28"},
+  {"text": "2025-02-28 + 1 year", "variables": {}, "expected": "2026-02-28"},
+  {"text": "2025-01-15 - 7 days", "variables": {}, "expected": "2025-01-08"},
+  {"text": "2025-01-01 + 2 weeks", "variables": {}, "expected": "2025-01-15"},
+  {"text": "2025-06-15 + 3 months", "variables": {}, "expected": "2025-09-15"},
+  {"text": "2025-12-31 + 1 day", "variables": {}, "expected": "2026-01-01"},
+  {"text": "2025-01-01 - 2024-01-01", "variables": {}, "expected": 366.0}
 ]
