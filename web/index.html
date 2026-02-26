@@ -675,12 +675,7 @@ function _tryDateEvalInner(tokens, variables) {
     return [result, variables];
   }
 
-  // Pattern 0: bare DATE
-  if (body.length === 1 && body[0][0] === "DATE") {
-    return _finish(body[0][1]);
-  }
-
-  // Pattern 1: "days/weeks until/since DATE"
+  // Pattern 1: "days/weeks until/since DATE" (checked before label stripping)
   if (body.length === 3
       && body[0][0] === "WORD" && (body[0][1].toLowerCase() === "days" || body[0][1].toLowerCase() === "weeks")
       && body[1][0] === "WORD" && (body[1][1].toLowerCase() === "until" || body[1][1].toLowerCase() === "since")
@@ -691,6 +686,21 @@ function _tryDateEvalInner(tokens, variables) {
     const diffDays = dir === "until" ? _dateDiffDays(target, today) : _dateDiffDays(today, target);
     if (body[0][1].toLowerCase() === "weeks") return _finish(new Big(diffDays).div(7));
     return _finish(new Big(diffDays));
+  }
+
+  // Strip leading label tokens before the first DATE for remaining patterns
+  const LABEL_TYPES = new Set(["WORD", "LPAREN", "RPAREN", "COMMA"]);
+  let firstDateIdx = -1;
+  for (let i = 0; i < body.length; i++) {
+    if (body[i][0] === "DATE") { firstDateIdx = i; break; }
+  }
+  if (firstDateIdx > 0 && body.slice(0, firstDateIdx).every(t => LABEL_TYPES.has(t[0]))) {
+    body = body.slice(firstDateIdx);
+  }
+
+  // Pattern 0: bare DATE
+  if (body.length === 1 && body[0][0] === "DATE") {
+    return _finish(body[0][1]);
   }
 
   // Pattern 2: DATE ± expr duration_unit (supports compound: + 1 week + 3 days)

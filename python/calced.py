@@ -846,11 +846,7 @@ def _try_date_eval_inner(tokens, variables):
             return result, {**variables, var_name: result}
         return result, variables
 
-    # Pattern 0: bare DATE (e.g., "today", "2025-01-15")
-    if len(body) == 1 and body[0][0] == DATE:
-        return _finish(body[0][1])
-
-    # Pattern 1: "days/weeks until/since DATE"
+    # Pattern 1: "days/weeks until/since DATE" (checked before label stripping)
     if (
         len(body) == 3
         and body[0][0] == "WORD"
@@ -866,6 +862,21 @@ def _try_date_eval_inner(tokens, variables):
         if body[0][1].lower() == "weeks":
             return _finish(Decimal(diff_days) / Decimal(7))
         return _finish(Decimal(diff_days))
+
+    # Strip leading label tokens before the first DATE for remaining patterns
+    first_date_idx = next(
+        (i for i, t in enumerate(body) if t[0] == DATE), None
+    )
+    if first_date_idx is not None and first_date_idx > 0:
+        if all(
+            t[0] in ("WORD", "LPAREN", "RPAREN", "COMMA")
+            for t in body[:first_date_idx]
+        ):
+            body = body[first_date_idx:]
+
+    # Pattern 0: bare DATE (e.g., "today", "2025-01-15")
+    if len(body) == 1 and body[0][0] == DATE:
+        return _finish(body[0][1])
 
     # Pattern 2: DATE ± expr duration_unit (supports compound: + 1 week + 3 days)
     if (

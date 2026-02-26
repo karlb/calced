@@ -428,6 +428,24 @@ def test_label_prefix_does_not_change_result(expr, label):
     )
 
 
+_paren_labels = st.sampled_from(["(note)", "(monthly)", "(info)", "(cost)"])
+
+
+@given(expr=simple_expressions(), label=_paren_labels)
+@settings(max_examples=200)
+def test_paren_label_prefix_does_not_change_result(expr, label):
+    """Prepending a parenthesized label should not change the numeric result."""
+    r_plain, _ = evaluate_line(expr, {})
+    assume(r_plain is not None)
+    r_labeled, _ = evaluate_line(f"{label} {expr}", {})
+    assert r_labeled is not None, (
+        f"'{label} {expr}' returned None but '{expr}' returned {r_plain}"
+    )
+    assert r_plain == r_labeled, (
+        f"'{label} {expr}' = {r_labeled}, but '{expr}' = {r_plain}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # 11. Trailing parenthetical annotation invariance
 # ---------------------------------------------------------------------------

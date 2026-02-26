@@ -166,6 +166,32 @@ class TestEvaluate(unittest.TestCase):
         r, _ = evaluate_line("2025-01-01 + 1 week + 3 days", {})
         self.assertEqual(r, datetime.date(2025, 1, 11))
 
+    def test_label_before_date_arithmetic(self):
+        """Text label before date + duration evaluates as date math."""
+        r, _ = evaluate_line("note 2025-06-15 + 3 days", {})
+        self.assertEqual(r, datetime.date(2025, 6, 18))
+
+    def test_paren_label_before_date_arithmetic(self):
+        """Parenthesized label before date + duration evaluates as date math."""
+        r, _ = evaluate_line("(deadline) 2025-06-15 + 3 days", {})
+        self.assertEqual(r, datetime.date(2025, 6, 18))
+
+    def test_paren_label_before_bare_date(self):
+        """Parenthesized label before bare date returns the date."""
+        r, _ = evaluate_line("(info) 2025-06-15", {})
+        self.assertEqual(r, datetime.date(2025, 6, 15))
+
+    def test_label_before_date_difference(self):
+        """Text label before DATE - DATE returns day count."""
+        r, _ = evaluate_line("gap 2025-03-01 - 2025-01-01", {})
+        self.assertEqual(r, 59)
+
+    def test_assign_with_label_before_date(self):
+        """Assignment with parenthesized label and date arithmetic."""
+        r, v = evaluate_line("d = (project) 2025-06-15 + 3 days", {})
+        self.assertEqual(r, datetime.date(2025, 6, 18))
+        self.assertEqual(v["d"], datetime.date(2025, 6, 18))
+
 
 if __name__ == "__main__":
     unittest.main()

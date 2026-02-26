@@ -46,5 +46,24 @@
 
   {"note": "compound date: week + days", "text": "2025-01-01 + 1 week + 3 days", "variables": {}, "expected": "2025-01-11"},
   {"note": "compound date: month + days", "text": "2025-01-01 + 1 month + 15 days", "variables": {}, "expected": "2025-02-16"},
-  {"note": "compound date: subtract week and days", "text": "2025-01-15 - 1 week - 3 days", "variables": {}, "expected": "2025-01-05"}
+  {"note": "compound date: subtract week and days", "text": "2025-01-15 - 1 week - 3 days", "variables": {}, "expected": "2025-01-05"},
+
+  {"note": "paren label + percentage", "text": "(tax) 200 + 10%", "variables": {}, "expected": 220.0},
+  {"note": "paren label + conversion", "text": "(weight) 1 kg in g", "variables": {}, "expected": 1000.0},
+  {"note": "paren label + function", "text": "(area) sqrt(144)", "variables": {}, "expected": 12.0},
+  {"note": "paren label + SI prefix", "text": "(note) 1k + 500", "variables": {}, "expected": 1500.0},
+  {"note": "two paren labels around operator", "text": "(first) 10 + (second) 20", "variables": {}, "expected": 30.0},
+  {"note": "nested paren label", "text": "((deep)) 100", "variables": {}, "expected": 100.0},
+  {"note": "consecutive paren labels", "text": "(foo) (bar) 100", "variables": {}, "expected": 100.0},
+  {"note": "text labels around subtraction", "text": "salary 5000 - tax 1000 - insurance 500", "variables": {}, "expected": 3500.0},
+
+  {"note": "label before date arithmetic", "text": "note 2025-06-15 + 3 days", "variables": {}, "expected": "2025-06-18"},
+  {"note": "paren label before date arithmetic", "text": "(deadline) 2025-06-15 + 3 days", "variables": {}, "expected": "2025-06-18"},
+  {"note": "paren label before bare date", "text": "(info) 2025-06-15", "variables": {}, "expected": "2025-06-15"},
+  {"note": "paren label before compound date", "text": "(plan) 2025-01-01 + 1 week + 3 days", "variables": {}, "expected": "2025-01-11"},
+  {"note": "label before date difference", "text": "gap 2025-03-01 - 2025-01-01", "variables": {}, "expected": 59.0},
+
+  {"note": "compound date: 4 segments", "text": "2025-01-01 + 1 day + 1 week + 1 month + 1 year", "variables": {}, "expected": "2026-02-09"},
+  {"note": "compound date: same unit twice", "text": "2025-01-01 + 1 week + 1 week", "variables": {}, "expected": "2025-01-15"},
+  {"note": "compound date: expression in second segment", "text": "2025-01-01 + 1 week + 2 * 3 days", "variables": {}, "expected": "2025-01-14"}
 ]

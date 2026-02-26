@@ -67,6 +67,13 @@ answer sqrt(16)                         # => 4
 (just) 100                              # => 100
 (note) 100 + 50                         # => 150
 rent (monthly) 1500                     # => 1_500
+(tax) 200 + 10%                         # => 220
+(weight) 150 lb in kg                   # => 68.0388
+(area) sqrt(144)                        # => 12
+(note) 1k + 500                         # => 1_500
+(first) 10 + (second) 20                # => 30
+((deep)) 100                            # => 100
+(foo) (bar) 100                         # => 100
 
 # Date Arithmetic with Expressions
 
@@ -79,6 +86,17 @@ rent (monthly) 1500                     # => 1_500
 2025-01-01 + 1 week + 3 days            # => 2025-01-11
 2025-01-01 + 1 month + 15 days          # => 2025-02-16
 2025-01-15 - 1 week - 3 days            # => 2025-01-05
+2025-01-01 + 1 day + 1 week + 1 month + 1 year # => 2026-02-09
+2025-01-01 + 1 week + 1 week            # => 2025-01-15
+2025-01-01 + 1 week + 2 * 3 days        # => 2025-01-14
+
+# Labels Before Date Arithmetic
+
+note 2025-06-15 + 3 days                # => 2025-06-18
+(deadline) 2025-06-15 + 3 days          # => 2025-06-18
+(info) 2025-06-15                       # => 2025-06-15
+(plan) 2025-01-01 + 1 week + 3 days     # => 2025-01-11
+gap 2025-03-01 - 2025-01-01             # => 59
 
 # Leap Year Dates
 
