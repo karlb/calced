@@ -469,7 +469,8 @@ def classify_line(text, variables, rates=None):
             if conversion is not None:
                 active.update({conv_start, conv_start + 1, conv_start + 2})
 
-            all_vars = {**BUILTIN_CONSTS, **(variables or {})}
+            all_vars = {**BUILTIN_CONSTS, **(variables or {}),
+                        "total": 0, "sum": 0}
             math_tokens, math_to_orig = _build_math(
                 tokens, math_start, conv_start, eof_idx, all_vars
             )
