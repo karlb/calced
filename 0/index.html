@@ -562,6 +562,12 @@ function _buildMath(tokens, start, convStart, eofIdx, allVars) {
           mathToOrig.push(idx);
         }
       }
+    } else if (t[0] === "TOTAL") {
+      if ("total" in allVars) {
+        const v = allVars["total"];
+        mathTokens.push(["NUM", v instanceof Big ? v : new Big(v), t[2], t[3]]);
+        mathToOrig.push(idx);
+      }
     } else if (t[0] === "EQ" || t[0] === "DATE") {
       // skip
     } else if (t[0] === "COMMA" && parenDepth === 0) {
@@ -780,21 +786,27 @@ function _tryDateEvalInner(tokens, variables) {
   return null;
 }
 
-function evaluateLine(text, variables, rates) {
+function evaluateLine(text, variables, rates, resultsAcc) {
   let tokens = tokenize(text);
-  if (tokens.some(t => t[0] === "TOTAL")) return ["TOTAL", variables];
+  const hasTotal = tokens.some(t => t[0] === "TOTAL");
   // Try date evaluation first
   const dateResult = _tryDateEval(tokens, variables);
-  if (dateResult !== null) return dateResult;
+  if (dateResult !== null) return [dateResult[0], dateResult[1], hasTotal];
   // Reduce parenthesized date sub-expressions to numbers
   tokens = _reduceDateSubexprs(tokens, variables || Object.create(null));
   const allVars = Object.create(null);
   for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
   for (const k in variables) allVars[k] = variables[k];
+  // Compute subtotal from accumulator and inject as "total"/"sum"
+  if (resultsAcc) {
+    const subtotal = resultsAcc.reduce((s, r) => r !== null && !_isDateObj(r) ? s.plus(r) : s, new Big(0));
+    allVars["total"] = subtotal;
+    allVars["sum"] = subtotal;
+  }
   const hasValue = tokens.some(t =>
-    t[0] === "NUM" || t[0] === "PCT" || t[0] === "FUNC" || t[0] === "DATE" || (t[0] === "WORD" && t[1].toLowerCase() in allVars)
+    t[0] === "NUM" || t[0] === "PCT" || t[0] === "FUNC" || t[0] === "DATE" || t[0] === "TOTAL" || (t[0] === "WORD" && t[1].toLowerCase() in allVars)
   );
-  if (!hasValue) return [null, variables];
+  if (!hasValue) return [null, variables, false];
   let pos = 0;
   let varName = null;
   if (tokens.length >= 3 && tokens[0][0] === "WORD" && tokens[1][0] === "EQ") {
@@ -805,7 +817,7 @@ function evaluateLine(text, variables, rates) {
   const eofIdx = tokens.length - 1;
   const [mathTokens] = _buildMath(tokens, pos, convStart, eofIdx, allVars);
   let [result] = _tryParse(mathTokens);
-  if (result === null) return [null, variables];
+  if (result === null) return [null, variables, false];
   if (conversion !== null) {
     const [dim, fromFactor, toFactor] = conversion;
     if (dim === "temperature") result = convertTemperature(result, fromFactor, toFactor);
@@ -815,9 +827,9 @@ function evaluateLine(text, variables, rates) {
     const newVars = Object.create(null);
     for (const k in variables) newVars[k] = variables[k];
     newVars[varName] = result;
-    return [result, newVars];
+    return [result, newVars, hasTotal];
   }
-  return [result, variables];
+  return [result, variables, hasTotal];
 }
 
 function addCommas(s) {
@@ -909,7 +921,8 @@ function classifyLine(text, variables, rates) {
     }
   }
   if (hasMath && active.size === 0) {
-    if (tokens.some(t => t[0] === "TOTAL")) {
+    if (tokens.some(t => t[0] === "TOTAL")
+        && !tokens.some(t => t[0] !== "EOF" && (t[0] === "NUM" || t[0] === "PCT" || t[0] === "OP" || t[0] === "FUNC" || t[0] === "WORD" || t[0] === "LPAREN"))) {
       for (let i = 0; i < tokens.length; i++) {
         if (tokens[i][0] === "TOTAL") active.add(i);
       }
@@ -1028,15 +1041,12 @@ function processText(text) {
       output.push({ result: null, cls });
       continue;
     }
-    const [result, newVars] = evaluateLine(stripped, variables, rates);
+    const [result, newVars, isTotal] = evaluateLine(stripped, variables, rates, resultsAcc);
     variables = newVars;
-    if (result === "TOTAL") {
-      const total = resultsAcc.reduce((s, r) => r !== null && !_isDateObj(r) ? s.plus(r) : s, new Big(0));
-      resultsAcc.push(total);
-      output.push({ result: formatResult(total, { ...fmtOpts }), cls });
-    } else if (result !== null) {
+    if (result !== null) {
       resultsAcc.push(result);
       output.push({ result: formatResult(result, { ...fmtOpts }), cls });
+      if (isTotal) resultsAcc = [];
     } else {
       resultsAcc.push(null);
       output.push({ result: null, cls });
