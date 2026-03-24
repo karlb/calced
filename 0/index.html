@@ -945,6 +945,7 @@ function classifyLine(text, variables, rates) {
       const allVars = Object.create(null);
       for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
       if (variables) { for (const k in variables) allVars[k] = variables[k]; }
+      allVars['total'] = 0; allVars['sum'] = 0;
       const [mathTokens, mathToOrig] = _buildMath(tokens, mathStart, convStart, eofIdx, allVars);
       const [result, consumed] = _tryParse(mathTokens);
 
