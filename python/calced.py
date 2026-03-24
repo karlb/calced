@@ -451,7 +451,9 @@ def classify_line(text, variables, rates=None):
             # Reduce parenthesized date sub-expressions for classification
             tokens = _reduce_date_subexprs(tokens, variables or {})
     if has_math and not active:
-        if any(t[0] == "TOTAL" for t in tokens if t[0] != "EOF"):
+        if (any(t[0] == "TOTAL" for t in tokens if t[0] != "EOF")
+                and not any(t[0] in ("NUM", "PCT", "OP", "FUNC", "WORD", "LPAREN")
+                            for t in tokens if t[0] not in ("EOF",))):
             for idx, t in enumerate(tokens):
                 if t[0] == "TOTAL":
                     active.add(idx)
@@ -705,6 +707,10 @@ def _build_math(tokens, start, conv_start, eof_idx, all_vars):
             wl = t[1].lower()
             if wl in all_vars and not isinstance(all_vars[wl], datetime.date):
                 math_tokens.append(("NUM", all_vars[wl], t[2], t[3]))
+                math_to_orig.append(idx)
+        elif t[0] == "TOTAL":
+            if "total" in all_vars:
+                math_tokens.append(("NUM", all_vars["total"], t[2], t[3]))
                 math_to_orig.append(idx)
         elif t[0] in ("EQ", DATE):
             pass
@@ -972,17 +978,17 @@ def _try_date_eval_inner(tokens, variables):
     return None
 
 
-def evaluate_line(text, variables, rates=None):
-    """Evaluate a line. Returns (result, variables) or (None, variables)."""
+def evaluate_line(text, variables, rates=None, results_acc=None):
+    """Evaluate a line. Returns (result, variables, has_total) or (None, variables, False)."""
     tokens = tokenize(text)
 
-    if any(t[0] == "TOTAL" for t in tokens):
-        return "TOTAL", variables
+    has_total = any(t[0] == "TOTAL" for t in tokens)
 
     # Try date evaluation first
     date_result = _try_date_eval(tokens, variables)
     if date_result is not None:
-        return date_result
+        r, v = date_result
+        return r, v, has_total
 
     # Reduce parenthesized date sub-expressions to numbers
     # e.g. (2025-03-01 - 2025-01-01) days in s → 59 days in s
@@ -990,13 +996,19 @@ def evaluate_line(text, variables, rates=None):
 
     all_vars = {**BUILTIN_CONSTS, **variables}
 
+    # Compute subtotal from accumulator and inject as "total"/"sum"
+    if results_acc is not None:
+        subtotal = sum(r for r in results_acc if r is not None and not isinstance(r, datetime.date))
+        all_vars["total"] = subtotal
+        all_vars["sum"] = subtotal
+
     has_value = any(
-        t[0] in ("NUM", "PCT", "FUNC", DATE)
+        t[0] in ("NUM", "PCT", "FUNC", DATE, "TOTAL")
         or (t[0] == "WORD" and t[1].lower() in all_vars)
         for t in tokens
     )
     if not has_value:
-        return None, variables
+        return None, variables, False
 
     pos = 0
     var_name = None
@@ -1010,7 +1022,7 @@ def evaluate_line(text, variables, rates=None):
     result, _ = _try_parse(math_tokens)
 
     if result is None:
-        return None, variables
+        return None, variables, False
     if conversion is not None:
         dim, from_factor, to_factor = conversion
         if dim == "temperature":
@@ -1019,7 +1031,7 @@ def evaluate_line(text, variables, rates=None):
             result = result * from_factor / to_factor
     if var_name:
         variables = {**variables, var_name: result}
-    return result, variables
+    return result, variables, has_total
 
 
 def format_result(n, fmt_opts=None):
@@ -1149,15 +1161,13 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
             continue
 
         vars_before = dict(variables)
-        result, variables = evaluate_line(stripped, variables, rates=rates)
+        result, variables, is_total = evaluate_line(stripped, variables, rates=rates, results_acc=results_acc)
 
-        if result == "TOTAL":
-            total = sum(r for r in results_acc if r is not None and not isinstance(r, datetime.date))
-            results_acc.append(total)
-            evaluated.append((clean, total, dict(fmt_opts), vars_before))
-        elif result is not None:
+        if result is not None:
             results_acc.append(result)
             evaluated.append((clean, result, dict(fmt_opts), vars_before))
+            if is_total:
+                results_acc.clear()
         else:
             results_acc.append(None)
             evaluated.append((clean, None, None, None))
@@ -1312,18 +1322,16 @@ def process_json(content):
             output.append({"input": "", "result": None})
             continue
 
-        result, variables = evaluate_line(stripped, variables, rates=rates)
+        result, variables, is_total = evaluate_line(stripped, variables, rates=rates, results_acc=results_acc)
 
-        if result == "TOTAL":
-            total = sum(r for r in results_acc if r is not None and not isinstance(r, datetime.date))
-            results_acc.append(total)
-            output.append({"input": clean, "result": float(total)})
-        elif result is not None:
+        if result is not None:
             results_acc.append(result)
             if isinstance(result, datetime.date):
                 output.append({"input": clean, "result": result.isoformat()})
             else:
                 output.append({"input": clean, "result": float(result)})
+            if is_total:
+                results_acc.clear()
         else:
             results_acc.append(None)
             output.append({"input": clean, "result": None})

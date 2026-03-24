@@ -20,7 +20,7 @@ class TestEvaluate(unittest.TestCase):
     def test_vectors(self):
         for i, v in enumerate(vectors):
             with self.subTest(i=i, text=v["text"]):
-                result, _ = evaluate_line(v["text"], v["variables"])
+                result, *_ = evaluate_line(v["text"], v["variables"])
                 expected = v["expected"]
                 if isinstance(expected, str):
                     # Date result: compare ISO string
@@ -29,12 +29,12 @@ class TestEvaluate(unittest.TestCase):
                     self.assertEqual(result, expected)
 
     def test_today(self):
-        result, _ = evaluate_line("today + 0 days", {})
+        result, *_ = evaluate_line("today + 0 days", {})
         self.assertEqual(result, datetime.date.today())
 
     def test_date_variable(self):
-        _, v = evaluate_line("d = 2025-01-15 + 2 weeks", {})
-        result, _ = evaluate_line("d - 2025-01-15", v)
+        _, v, *_ = evaluate_line("d = 2025-01-15 + 2 weeks", {})
+        result, *_ = evaluate_line("d - 2025-01-15", v)
         self.assertEqual(result, 14)
 
     def test_dates_skip_total(self):
@@ -48,79 +48,79 @@ class TestEvaluate(unittest.TestCase):
 
     def test_nested_functions(self):
         """Nested function calls should evaluate correctly."""
-        r, _ = evaluate_line("sqrt(abs(-16))", {})
+        r, *_ = evaluate_line("sqrt(abs(-16))", {})
         self.assertEqual(r, 4)
-        r, _ = evaluate_line("max(sqrt(4), sqrt(9))", {})
+        r, *_ = evaluate_line("max(sqrt(4), sqrt(9))", {})
         self.assertEqual(r, 3)
 
     def test_function_with_conversion(self):
         """Function result used in unit conversion."""
-        r, _ = evaluate_line("sqrt(4) km in miles", {})
+        r, *_ = evaluate_line("sqrt(4) km in miles", {})
         self.assertIsNotNone(r)
         self.assertAlmostEqual(float(r), 1.2427, places=3)
 
     def test_percentage_in_parens_then_multiply(self):
         """(val + pct%) * factor should work."""
-        r, _ = evaluate_line("(200 + 10%) * 2", {})
+        r, *_ = evaluate_line("(200 + 10%) * 2", {})
         self.assertEqual(r, 440)
 
     def test_chained_percentages(self):
         """Multiple percentage operations chain correctly."""
-        r, _ = evaluate_line("200 + 10% + 5%", {})
+        r, *_ = evaluate_line("200 + 10% + 5%", {})
         self.assertEqual(r, 231)
 
     def test_percentage_plus_then_addition(self):
         """Percentage then plain addition: (200*1.1) + 50."""
-        r, _ = evaluate_line("200 + 10% + 50", {})
+        r, *_ = evaluate_line("200 + 10% + 50", {})
         self.assertEqual(r, 270)
 
     def test_si_prefix_in_expression(self):
-        r, _ = evaluate_line("1k + 500", {})
+        r, *_ = evaluate_line("1k + 500", {})
         self.assertEqual(r, 1500)
 
     def test_label_with_operator(self):
         """Text labels around operators should be ignored."""
-        r, _ = evaluate_line("price 10 + tax 5", {})
+        r, *_ = evaluate_line("price 10 + tax 5", {})
         self.assertEqual(r, 15)
 
     def test_label_with_conversion(self):
         """Text label before unit conversion."""
-        r, _ = evaluate_line("distance 100 km in miles", {})
+        r, *_ = evaluate_line("distance 100 km in miles", {})
         self.assertIsNotNone(r)
         self.assertAlmostEqual(float(r), 62.137, places=2)
 
     def test_variable_with_conversion(self):
         """Variable used as value in unit conversion."""
-        r, _ = evaluate_line("x km in miles", {"x": Decimal(10)})
+        r, *_ = evaluate_line("x km in miles", {"x": Decimal(10)})
         self.assertIsNotNone(r)
         self.assertAlmostEqual(float(r), 6.214, places=2)
 
     def test_date_with_expression_days(self):
         """Date + (expression) days."""
-        r, _ = evaluate_line("2025-01-01 + (2 * 7) days", {})
+        r, *_ = evaluate_line("2025-01-01 + (2 * 7) days", {})
         self.assertEqual(r, datetime.date(2025, 1, 15))
 
     def test_negative_date_difference(self):
         """Earlier - later gives negative days."""
-        r, _ = evaluate_line("2025-01-01 - 2025-03-01", {})
+        r, *_ = evaluate_line("2025-01-01 - 2025-03-01", {})
         self.assertEqual(r, -59)
 
     def test_leap_year_plus_one_year(self):
         """Feb 29 + 1 year clamps to Feb 28."""
-        r, _ = evaluate_line("2024-02-29 + 1 year", {})
+        r, *_ = evaluate_line("2024-02-29 + 1 year", {})
         self.assertEqual(r, datetime.date(2025, 2, 28))
 
     def test_leap_year_plus_four_years(self):
         """Feb 29 + 4 years preserves Feb 29."""
-        r, _ = evaluate_line("2024-02-29 + 4 years", {})
+        r, *_ = evaluate_line("2024-02-29 + 4 years", {})
         self.assertEqual(r, datetime.date(2028, 2, 29))
 
     def test_variable_chain(self):
         """Variables referencing other variables."""
-        _, v = evaluate_line("a = 10", {})
-        _, v = evaluate_line("b = a + 5", v)
-        _, v = evaluate_line("c = b * 2", v)
-        r, _ = evaluate_line("a + b + c", v)
+        _, v, *_ = evaluate_line("a = 10", {})
+        _, v, *_ = evaluate_line("b = a + 5", v)
+        _, v, *_ = evaluate_line("c = b * 2", v)
+        r, *_ = evaluate_line("a + b + c", v)
         self.assertEqual(r, 55)
 
     def test_total_with_mixed_expressions(self):
@@ -147,7 +147,7 @@ class TestEvaluate(unittest.TestCase):
 
     def test_leading_paren_label_evaluates(self):
         """(label) before expression evaluates the numeric part."""
-        r, _ = evaluate_line("(just) 100", {})
+        r, *_ = evaluate_line("(just) 100", {})
         self.assertEqual(r, 100)
 
     def test_pct_then_multiply_returns_none(self):
@@ -158,37 +158,37 @@ class TestEvaluate(unittest.TestCase):
         operation gives 440. Returning None avoids a surprising result.
         Workaround: (200 + 10%) * 2.
         """
-        r, _ = evaluate_line("200 + 10% * 2", {})
+        r, *_ = evaluate_line("200 + 10% * 2", {})
         self.assertIsNone(r)
 
     def test_compound_date_durations(self):
         """2025-01-01 + 1 week + 3 days evaluates as compound date math."""
-        r, _ = evaluate_line("2025-01-01 + 1 week + 3 days", {})
+        r, *_ = evaluate_line("2025-01-01 + 1 week + 3 days", {})
         self.assertEqual(r, datetime.date(2025, 1, 11))
 
     def test_label_before_date_arithmetic(self):
         """Text label before date + duration evaluates as date math."""
-        r, _ = evaluate_line("note 2025-06-15 + 3 days", {})
+        r, *_ = evaluate_line("note 2025-06-15 + 3 days", {})
         self.assertEqual(r, datetime.date(2025, 6, 18))
 
     def test_paren_label_before_date_arithmetic(self):
         """Parenthesized label before date + duration evaluates as date math."""
-        r, _ = evaluate_line("(deadline) 2025-06-15 + 3 days", {})
+        r, *_ = evaluate_line("(deadline) 2025-06-15 + 3 days", {})
         self.assertEqual(r, datetime.date(2025, 6, 18))
 
     def test_paren_label_before_bare_date(self):
         """Parenthesized label before bare date returns the date."""
-        r, _ = evaluate_line("(info) 2025-06-15", {})
+        r, *_ = evaluate_line("(info) 2025-06-15", {})
         self.assertEqual(r, datetime.date(2025, 6, 15))
 
     def test_label_before_date_difference(self):
         """Text label before DATE - DATE returns day count."""
-        r, _ = evaluate_line("gap 2025-03-01 - 2025-01-01", {})
+        r, *_ = evaluate_line("gap 2025-03-01 - 2025-01-01", {})
         self.assertEqual(r, 59)
 
     def test_assign_with_label_before_date(self):
         """Assignment with parenthesized label and date arithmetic."""
-        r, v = evaluate_line("d = (project) 2025-06-15 + 3 days", {})
+        r, v, *_ = evaluate_line("d = (project) 2025-06-15 + 3 days", {})
         self.assertEqual(r, datetime.date(2025, 6, 18))
         self.assertEqual(v["d"], datetime.date(2025, 6, 18))
 

@@ -50,7 +50,7 @@ const evaluateVectors = JSON.parse(readFileSync(join(testsDir, "evaluate_vectors
 for (let i = 0; i < evaluateVectors.length; i++) {
   const v = evaluateVectors[i];
   const [result] = evaluateLine(v.text, v.variables);
-  const resultVal = result !== null && result !== "TOTAL"
+  const resultVal = result !== null
     ? (result._isDate ? `${result.y}-${String(result.m).padStart(2,"0")}-${String(result.d).padStart(2,"0")}` : result.toNumber())
     : result;
   if (resultVal !== v.expected) {
