@@ -544,10 +544,11 @@ function _crossRate(fr, to, rates) {
 
 function _detectConversion(tokens, rates) {
   const eofIdx = tokens.length - 1;
-  if (eofIdx >= 4) {
-    const tFr = tokens[eofIdx - 3];
-    const tKw = tokens[eofIdx - 2];
-    const tTo = tokens[eofIdx - 1];
+  // Scan backwards for WORD(from) WORD(in/to) WORD(to) pattern
+  for (let i = eofIdx - 3; i >= 0; i--) {
+    const tFr = tokens[i];
+    const tKw = tokens[i + 1];
+    const tTo = tokens[i + 2];
     if ((tTo[0] === "WORD" || tTo[0] === "FUNC")
         && tKw[0] === "WORD" && (tKw[1].toLowerCase() === "in" || tKw[1].toLowerCase() === "to")
         && (tFr[0] === "WORD" || tFr[0] === "FUNC")) {
@@ -556,28 +557,43 @@ function _detectConversion(tokens, rates) {
       if (frName in UNIT_LOOKUP && toName in UNIT_LOOKUP) {
         const [frDim, frFactor] = UNIT_LOOKUP[frName];
         const [toDim, toFactor] = UNIT_LOOKUP[toName];
-        if (frDim === toDim) return [[frDim, frFactor, toFactor], eofIdx - 3];
+        if (frDim === toDim) return [[frDim, frFactor, toFactor], i, i + 3];
       }
       if (rates) {
         const pair = frName + "/" + toName;
         const rev = toName + "/" + frName;
-        if (pair in rates) return [["rate", rates[pair], new Big(1)], eofIdx - 3];
-        if (rev in rates) return [["rate", new Big(1), rates[rev]], eofIdx - 3];
+        if (pair in rates) return [["rate", rates[pair], new Big(1)], i, i + 3];
+        if (rev in rates) return [["rate", new Big(1), rates[rev]], i, i + 3];
         const cross = _crossRate(frName, toName, rates);
-        if (cross !== null) return [["rate", cross, new Big(1)], eofIdx - 3];
+        if (cross !== null) return [["rate", cross, new Big(1)], i, i + 3];
       }
     }
   }
-  return [null, eofIdx];
+  return [null, eofIdx, eofIdx];
 }
 
-function _buildMath(tokens, start, convStart, eofIdx, allVars) {
+function _buildMath(tokens, start, convStart, convEnd, eofIdx, allVars, conversion) {
   const mathTokens = [];
   const mathToOrig = [];
   let parenDepth = 0;
   for (let idx = start; idx < tokens.length; idx++) {
     const t = tokens[idx];
-    if (idx >= convStart && idx < eofIdx) continue;
+    if (idx >= convStart && idx < convEnd) {
+      // Replace the conversion span with inline MULOP(*) NUM(factor)
+      if (idx === convStart && conversion) {
+        const [dim, fromFactor, toFactor] = conversion;
+        if (dim !== "temperature") {
+          const ff = fromFactor instanceof Big ? fromFactor : new Big(fromFactor);
+          const tf = toFactor instanceof Big ? toFactor : new Big(toFactor);
+          const factor = ff.div(tf);
+          mathTokens.push(["MULOP", "*", t[2], t[3]]);
+          mathToOrig.push(idx);
+          mathTokens.push(["NUM", factor, t[2], t[3]]);
+          mathToOrig.push(idx);
+        }
+      }
+      continue;
+    }
     if (t[0] === "WORD") {
       const wl = t[1].toLowerCase();
       if (wl in allVars) {
@@ -604,24 +620,76 @@ function _buildMath(tokens, start, convStart, eofIdx, allVars) {
       mathToOrig.push(idx);
     }
   }
-  // Strip empty parentheses left behind when WORDs inside parens are skipped
+  // Strip empty parentheses (and parens containing only commas) left behind
   let mt = mathTokens, mo = mathToOrig, changed = true;
   while (changed) {
     changed = false;
     const nt = [], no = [];
     let i = 0;
     while (i < mt.length) {
-      if (i + 1 < mt.length && mt[i][0] === "LPAREN" && mt[i + 1][0] === "RPAREN") {
-        i += 2;
-        changed = true;
-      } else {
-        nt.push(mt[i]);
-        no.push(mo[i]);
-        i++;
+      if (mt[i][0] === "LPAREN") {
+        let j = i + 1, onlyCommas = true;
+        while (j < mt.length && mt[j][0] !== "RPAREN") {
+          if (mt[j][0] !== "COMMA") { onlyCommas = false; break; }
+          j++;
+        }
+        if (onlyCommas && j < mt.length && mt[j][0] === "RPAREN") {
+          i = j + 1;
+          changed = true;
+          continue;
+        }
       }
+      nt.push(mt[i]);
+      no.push(mo[i]);
+      i++;
     }
     mt = nt;
     mo = no;
+  }
+  // Strip orphaned operators left behind when WORDs are removed
+  changed = true;
+  while (changed) {
+    changed = false;
+    const nt = [], no = [];
+    for (let i = 0; i < mt.length; i++) {
+      const typ = mt[i][0];
+      if (typ === "ADDOP" || typ === "MULOP") {
+        // Strip leading operator (except unary minus that was truly first)
+        if (nt.length === 0) {
+          if (typ === "MULOP") {
+            // never valid as unary; keep it so parse fails
+            nt.push(mt[i]); no.push(mo[i]); continue;
+          }
+          if (typ === "ADDOP" && mt[i][1] === "-" && mo[i] === start) {
+            const nxt = i + 1 < mt.length ? mt[i + 1][0] : "EOF";
+            if (nxt === "NUM" || nxt === "LPAREN" || nxt === "FUNC") {
+              nt.push(mt[i]); no.push(mo[i]); continue;
+            }
+          }
+          changed = true; continue;
+        }
+        const prev = nt[nt.length - 1][0];
+        // Strip operator after another operator (except unary minus)
+        if (prev === "ADDOP" || prev === "MULOP") {
+          if (typ === "MULOP") {
+            // keep so parse fails rather than silently exposing trailing numbers
+            nt.push(mt[i]); no.push(mo[i]); continue;
+          }
+          if (typ === "ADDOP" && mt[i][1] === "-") {
+            const nxt = i + 1 < mt.length ? mt[i + 1][0] : "EOF";
+            if (nxt === "NUM" || nxt === "LPAREN" || nxt === "FUNC") {
+              nt.push(mt[i]); no.push(mo[i]); continue;
+            }
+          }
+          changed = true; continue;
+        }
+        // Strip trailing operator (before EOF or RPAREN)
+        const nxt = i + 1 < mt.length ? mt[i + 1][0] : "EOF";
+        if (nxt === "EOF" || nxt === "RPAREN") { changed = true; continue; }
+      }
+      nt.push(mt[i]); no.push(mo[i]);
+    }
+    mt = nt; mo = no;
   }
   return [mt, mo];
 }
@@ -735,15 +803,18 @@ function _tryDateEvalInner(tokens, variables) {
   // Strip leading label tokens before the first DATE for remaining patterns
   const LABEL_TYPES = new Set(["WORD", "LPAREN", "RPAREN", "COMMA"]);
   let firstDateIdx = -1;
+  let labelsStripped = false;
   for (let i = 0; i < body.length; i++) {
     if (body[i][0] === "DATE") { firstDateIdx = i; break; }
   }
   if (firstDateIdx > 0 && body.slice(0, firstDateIdx).every(t => LABEL_TYPES.has(t[0]))) {
     body = body.slice(firstDateIdx);
+    labelsStripped = true;
   }
 
   // Pattern 0: bare DATE
   if (body.length === 1 && body[0][0] === "DATE") {
+    if (labelsStripped) return null;
     return _finish(body[0][1]);
   }
 
@@ -838,15 +909,14 @@ function evaluateLine(text, variables, rates, resultsAcc) {
     varName = tokens[0][1].toLowerCase();
     pos = 2;
   }
-  const [conversion, convStart] = _detectConversion(tokens, rates);
+  const [conversion, convStart, convEnd] = _detectConversion(tokens, rates);
   const eofIdx = tokens.length - 1;
-  const [mathTokens] = _buildMath(tokens, pos, convStart, eofIdx, allVars);
+  const [mathTokens] = _buildMath(tokens, pos, convStart, convEnd, eofIdx, allVars, conversion);
   let [result] = _tryParse(mathTokens);
   if (result === null) return [null, variables, false];
   if (conversion !== null) {
     const [dim, fromFactor, toFactor] = conversion;
     if (dim === "temperature") result = convertTemperature(result, fromFactor, toFactor);
-    else result = result.times(fromFactor).div(toFactor);
   }
   if (varName) {
     const newVars = Object.create(null);
@@ -959,19 +1029,17 @@ function classifyLine(text, variables, rates) {
         mathStart = 2;
       }
 
-      const [conversion, convStart] = _detectConversion(tokens, rates);
+      const [conversion, convStart, convEnd] = _detectConversion(tokens, rates);
       const eofIdx = tokens.length - 1;
       if (conversion !== null) {
-        active.add(convStart);
-        active.add(convStart + 1);
-        active.add(convStart + 2);
+        for (let ci = convStart; ci < convEnd; ci++) active.add(ci);
       }
 
       const allVars = Object.create(null);
       for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
       if (variables) { for (const k in variables) allVars[k] = variables[k]; }
       allVars['total'] = 0; allVars['sum'] = 0;
-      const [mathTokens, mathToOrig] = _buildMath(tokens, mathStart, convStart, eofIdx, allVars);
+      const [mathTokens, mathToOrig] = _buildMath(tokens, mathStart, convStart, convEnd, eofIdx, allVars, conversion);
       const [result, consumed] = _tryParse(mathTokens);
 
       if (result !== null) {

@@ -177,9 +177,9 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual(r, datetime.date(2025, 6, 18))
 
     def test_paren_label_before_bare_date(self):
-        """Parenthesized label before bare date returns the date."""
+        """Parenthesized label before bare date is treated as plain text."""
         r, *_ = evaluate_line("(info) 2025-06-15", {})
-        self.assertEqual(r, datetime.date(2025, 6, 15))
+        self.assertIsNone(r)
 
     def test_label_before_date_difference(self):
         """Text label before DATE - DATE returns day count."""

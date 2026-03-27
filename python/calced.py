@@ -464,15 +464,15 @@ def classify_line(text, variables, rates=None):
                 active.add(1)
                 math_start = 2
 
-            conversion, conv_start = _detect_conversion(tokens, rates=rates)
+            conversion, conv_start, conv_end = _detect_conversion(tokens, rates=rates)
             eof_idx = len(tokens) - 1
             if conversion is not None:
-                active.update({conv_start, conv_start + 1, conv_start + 2})
+                active.update(range(conv_start, conv_end))
 
             all_vars = {**BUILTIN_CONSTS, **(variables or {}),
                         "total": 0, "sum": 0}
             math_tokens, math_to_orig = _build_math(
-                tokens, math_start, conv_start, eof_idx, all_vars
+                tokens, math_start, conv_start, conv_end, eof_idx, all_vars, conversion
             )
             result, consumed = _try_parse(math_tokens)
 
@@ -691,12 +691,17 @@ def _cross_rate(fr, to, rates):
 
 
 def _detect_conversion(tokens, rates=None):
-    """Detect unit conversion suffix: ... <from_unit> in|to <to_unit> EOF."""
+    """Detect unit conversion: ... <from_unit> in|to <to_unit> ...
+
+    Scans backwards through all token positions.
+    Returns (conversion_info, conv_start, conv_end) where conv_end is exclusive.
+    """
     eof_idx = len(tokens) - 1
-    if eof_idx >= 4:
-        t_fr = tokens[eof_idx - 3]
-        t_kw = tokens[eof_idx - 2]
-        t_to = tokens[eof_idx - 1]
+    # Scan backwards for the pattern: WORD(from) WORD(in/to) WORD(to)
+    for i in range(eof_idx - 3, -1, -1):
+        t_fr = tokens[i]
+        t_kw = tokens[i + 1]
+        t_to = tokens[i + 2]
         if (
             t_to[0] in ("WORD", "FUNC")
             and t_kw[0] == "WORD"
@@ -709,23 +714,22 @@ def _detect_conversion(tokens, rates=None):
                 fr_dim, fr_factor = UNIT_LOOKUP[fr_name]
                 to_dim, to_factor = UNIT_LOOKUP[to_name]
                 if fr_dim == to_dim:
-                    return (fr_dim, fr_factor, to_factor), eof_idx - 3
+                    return (fr_dim, fr_factor, to_factor), i, i + 3
             if rates:
                 pair = (fr_name, to_name)
                 rev = (to_name, fr_name)
                 if pair in rates:
-                    return ("rate", rates[pair], Decimal(1)), eof_idx - 3
+                    return ("rate", rates[pair], Decimal(1)), i, i + 3
                 elif rev in rates:
-                    return ("rate", Decimal(1), rates[rev]), eof_idx - 3
+                    return ("rate", Decimal(1), rates[rev]), i, i + 3
                 else:
-                    # Cross-currency: find common intermediate currency
                     cross = _cross_rate(fr_name, to_name, rates)
                     if cross is not None:
-                        return ("rate", cross, Decimal(1)), eof_idx - 3
-    return None, eof_idx
+                        return ("rate", cross, Decimal(1)), i, i + 3
+    return None, eof_idx, eof_idx
 
 
-def _build_math(tokens, start, conv_start, eof_idx, all_vars):
+def _build_math(tokens, start, conv_start, conv_end, eof_idx, all_vars, conversion=None):
     """Build math token list, resolving variables and skipping non-math tokens.
 
     Returns (math_tokens, math_to_orig) where math_to_orig[i] is the
@@ -736,7 +740,16 @@ def _build_math(tokens, start, conv_start, eof_idx, all_vars):
     paren_depth = 0
     for idx in range(start, len(tokens)):
         t = tokens[idx]
-        if conv_start <= idx < eof_idx:
+        if conv_start <= idx < conv_end:
+            # Replace the conversion span with inline MULOP(*) NUM(factor)
+            if idx == conv_start and conversion is not None:
+                dim, from_factor, to_factor = conversion
+                if dim != "temperature":
+                    factor = Decimal(str(from_factor)) / Decimal(str(to_factor))
+                    math_tokens.append(("MULOP", "*", t[2], t[3]))
+                    math_to_orig.append(idx)
+                    math_tokens.append(("NUM", factor, t[2], t[3]))
+                    math_to_orig.append(idx)
             continue
         if t[0] == "WORD":
             wl = t[1].lower()
@@ -758,7 +771,8 @@ def _build_math(tokens, start, conv_start, eof_idx, all_vars):
                 paren_depth -= 1
             math_tokens.append(t)
             math_to_orig.append(idx)
-    # Strip empty parentheses left behind when WORDs inside parens are skipped
+    # Strip empty parentheses (and parens containing only commas) left behind
+    # when WORDs inside parens are skipped
     changed = True
     while changed:
         changed = False
@@ -766,15 +780,71 @@ def _build_math(tokens, start, conv_start, eof_idx, all_vars):
         new_orig = []
         i = 0
         while i < len(math_tokens):
-            if (i + 1 < len(math_tokens)
-                    and math_tokens[i][0] == "LPAREN"
-                    and math_tokens[i + 1][0] == "RPAREN"):
-                i += 2
-                changed = True
-            else:
-                new_tokens.append(math_tokens[i])
-                new_orig.append(math_to_orig[i])
-                i += 1
+            if math_tokens[i][0] == "LPAREN":
+                # Find matching RPAREN
+                j = i + 1
+                only_commas = True
+                while j < len(math_tokens) and math_tokens[j][0] != "RPAREN":
+                    if math_tokens[j][0] != "COMMA":
+                        only_commas = False
+                        break
+                    j += 1
+                if only_commas and j < len(math_tokens) and math_tokens[j][0] == "RPAREN":
+                    i = j + 1
+                    changed = True
+                    continue
+            new_tokens.append(math_tokens[i])
+            new_orig.append(math_to_orig[i])
+            i += 1
+        math_tokens = new_tokens
+        math_to_orig = new_orig
+    # Strip orphaned operators left behind when WORDs are removed
+    changed = True
+    while changed:
+        changed = False
+        new_tokens = []
+        new_orig = []
+        for i, t in enumerate(math_tokens):
+            typ = t[0]
+            if typ in ("ADDOP", "MULOP"):
+                # Strip leading operator (except unary minus that was truly first)
+                if not new_tokens:
+                    if typ == "MULOP":
+                        # never valid as unary; keep it so parse fails
+                        new_tokens.append(t)
+                        new_orig.append(math_to_orig[i])
+                        continue
+                    if typ == "ADDOP" and t[1] == "-" and math_to_orig[i] == start:
+                        nxt = math_tokens[i + 1][0] if i + 1 < len(math_tokens) else "EOF"
+                        if nxt in ("NUM", "LPAREN", "FUNC"):
+                            new_tokens.append(t)
+                            new_orig.append(math_to_orig[i])
+                            continue
+                    changed = True
+                    continue
+                prev = new_tokens[-1][0]
+                # Strip operator after another operator (except unary minus)
+                if prev in ("ADDOP", "MULOP"):
+                    if typ == "MULOP":
+                        # keep so parse fails rather than silently exposing trailing numbers
+                        new_tokens.append(t)
+                        new_orig.append(math_to_orig[i])
+                        continue
+                    if typ == "ADDOP" and t[1] == "-":
+                        nxt = math_tokens[i + 1][0] if i + 1 < len(math_tokens) else "EOF"
+                        if nxt in ("NUM", "LPAREN", "FUNC"):
+                            new_tokens.append(t)
+                            new_orig.append(math_to_orig[i])
+                            continue
+                    changed = True
+                    continue
+                # Strip trailing operator (before EOF or RPAREN)
+                nxt = math_tokens[i + 1][0] if i + 1 < len(math_tokens) else "EOF"
+                if nxt in ("EOF", "RPAREN"):
+                    changed = True
+                    continue
+            new_tokens.append(t)
+            new_orig.append(math_to_orig[i])
         math_tokens = new_tokens
         math_to_orig = new_orig
     return math_tokens, math_to_orig
@@ -920,6 +990,7 @@ def _try_date_eval_inner(tokens, variables):
         return _finish(Decimal(diff_days))
 
     # Strip leading label tokens before the first DATE for remaining patterns
+    labels_stripped = False
     first_date_idx = next(
         (i for i, t in enumerate(body) if t[0] == DATE), None
     )
@@ -929,9 +1000,12 @@ def _try_date_eval_inner(tokens, variables):
             for t in body[:first_date_idx]
         ):
             body = body[first_date_idx:]
+            labels_stripped = True
 
     # Pattern 0: bare DATE (e.g., "today", "2025-01-15")
     if len(body) == 1 and body[0][0] == DATE:
+        if labels_stripped:
+            return None
         return _finish(body[0][1])
 
     # Pattern 2: DATE ± expr duration_unit (supports compound: + 1 week + 3 days)
@@ -1051,9 +1125,9 @@ def evaluate_line(text, variables, rates=None, results_acc=None):
         var_name = tokens[0][1].lower()
         pos = 2
 
-    conversion, conv_start = _detect_conversion(tokens, rates=rates)
+    conversion, conv_start, conv_end = _detect_conversion(tokens, rates=rates)
     eof_idx = len(tokens) - 1
-    math_tokens, _ = _build_math(tokens, pos, conv_start, eof_idx, all_vars)
+    math_tokens, _ = _build_math(tokens, pos, conv_start, conv_end, eof_idx, all_vars, conversion)
     result, _ = _try_parse(math_tokens)
 
     if result is None:
@@ -1062,8 +1136,6 @@ def evaluate_line(text, variables, rates=None, results_acc=None):
         dim, from_factor, to_factor = conversion
         if dim == "temperature":
             result = convert_temperature(result, from_factor, to_factor)
-        else:
-            result = result * from_factor / to_factor
     if var_name:
         variables = {**variables, var_name: result}
     return result, variables, has_total

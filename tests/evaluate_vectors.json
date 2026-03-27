@@ -59,7 +59,7 @@
 
   {"note": "label before date arithmetic", "text": "note 2025-06-15 + 3 days", "variables": {}, "expected": "2025-06-18"},
   {"note": "paren label before date arithmetic", "text": "(deadline) 2025-06-15 + 3 days", "variables": {}, "expected": "2025-06-18"},
-  {"note": "paren label before bare date", "text": "(info) 2025-06-15", "variables": {}, "expected": "2025-06-15"},
+  {"note": "paren label before bare date → plain text", "text": "(info) 2025-06-15", "variables": {}, "expected": null},
   {"note": "paren label before compound date", "text": "(plan) 2025-01-01 + 1 week + 3 days", "variables": {}, "expected": "2025-01-11"},
   {"note": "label before date difference", "text": "gap 2025-03-01 - 2025-01-01", "variables": {}, "expected": 59.0},
 
@@ -70,5 +70,10 @@
   {"note": "as % of basic", "text": "10 as % of 50", "variables": {}, "expected": 20.0},
   {"note": "as % of with expressions", "text": "25 as % of (50 + 50)", "variables": {}, "expected": 25.0},
   {"note": "as % of with variable", "text": "x as % of 200", "variables": {"x": 50}, "expected": 25.0},
-  {"note": "as % of greater than 100", "text": "150 as % of 100", "variables": {}, "expected": 150.0}
+  {"note": "as % of greater than 100", "text": "150 as % of 100", "variables": {}, "expected": 150.0},
+
+  {"note": "trailing text with hyphenated word", "text": "Other non-CELO (converted, approx) 437", "variables": {}, "expected": 437.0},
+  {"note": "word label before bare date → plain text", "text": "rates from 2026-03-26", "variables": {}, "expected": null},
+  {"note": "bare date without label still works", "text": "2025-06-15", "variables": {}, "expected": "2025-06-15"},
+  {"note": "URL with trailing number → plain text", "text": "Fees from https://dune.com/queries/6914777", "variables": {}, "expected": null}
 ]
