@@ -13,3 +13,10 @@ budget                                  # => 920
 
 # Expressions with rate conversion
 (500 + 500) USD in EUR                  # => 920
+
+# Cross-currency conversion via shared intermediate
+@rate CELO/USD = 0.083
+@rate ETH/USD = 2068
+
+1 ETH in CELO                           # => 24_915.66265
+0.5 BTC in EUR                          # => 44_850

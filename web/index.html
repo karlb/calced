@@ -519,6 +519,29 @@ class Parser {
   }
 }
 
+function _crossRate(fr, to, rates) {
+  function rateToMid(currency, mid) {
+    const pair = currency + "/" + mid;
+    if (pair in rates) return rates[pair];
+    const rev = mid + "/" + currency;
+    if (rev in rates) return new Big(1).div(rates[rev]);
+    return null;
+  }
+  const mids = new Set();
+  for (const key of Object.keys(rates)) {
+    const [a, b] = key.split("/");
+    mids.add(a);
+    mids.add(b);
+  }
+  for (const mid of mids) {
+    if (mid === fr || mid === to) continue;
+    const rFr = rateToMid(fr, mid);
+    const rTo = rateToMid(to, mid);
+    if (rFr !== null && rTo !== null) return rFr.div(rTo);
+  }
+  return null;
+}
+
 function _detectConversion(tokens, rates) {
   const eofIdx = tokens.length - 1;
   if (eofIdx >= 4) {
@@ -540,6 +563,8 @@ function _detectConversion(tokens, rates) {
         const rev = toName + "/" + frName;
         if (pair in rates) return [["rate", rates[pair], new Big(1)], eofIdx - 3];
         if (rev in rates) return [["rate", new Big(1), rates[rev]], eofIdx - 3];
+        const cross = _crossRate(frName, toName, rates);
+        if (cross !== null) return [["rate", cross, new Big(1)], eofIdx - 3];
       }
     }
   }

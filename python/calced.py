@@ -661,6 +661,35 @@ class Parser:
         raise ParseError(f"Unexpected: {t}")
 
 
+def _cross_rate(fr, to, rates):
+    """Find a cross rate between *fr* and *to* via a shared intermediate currency.
+
+    Returns the effective Decimal multiplier (1 fr = result to), or None.
+    """
+    def _rate_to_mid(currency, mid):
+        """Return the rate that converts 1 *currency* into *mid* units."""
+        if (currency, mid) in rates:
+            return rates[(currency, mid)]
+        if (mid, currency) in rates:
+            return Decimal(1) / rates[(mid, currency)]
+        return None
+
+    # Collect all currencies mentioned in any rate pair
+    mids = set()
+    for a, b in rates:
+        mids.add(a)
+        mids.add(b)
+
+    for mid in mids:
+        if mid == fr or mid == to:
+            continue
+        r_fr = _rate_to_mid(fr, mid)
+        r_to = _rate_to_mid(to, mid)
+        if r_fr is not None and r_to is not None:
+            return r_fr / r_to
+    return None
+
+
 def _detect_conversion(tokens, rates=None):
     """Detect unit conversion suffix: ... <from_unit> in|to <to_unit> EOF."""
     eof_idx = len(tokens) - 1
@@ -688,6 +717,11 @@ def _detect_conversion(tokens, rates=None):
                     return ("rate", rates[pair], Decimal(1)), eof_idx - 3
                 elif rev in rates:
                     return ("rate", Decimal(1), rates[rev]), eof_idx - 3
+                else:
+                    # Cross-currency: find common intermediate currency
+                    cross = _cross_rate(fr_name, to_name, rates)
+                    if cross is not None:
+                        return ("rate", cross, Decimal(1)), eof_idx - 3
     return None, eof_idx
 
 
