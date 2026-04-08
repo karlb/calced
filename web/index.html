@@ -1124,6 +1124,8 @@ function processText(text) {
       output.push({ result: null, cls });
     }
   }
+  const aligned = alignDecimalPoints(output, lines, "int");
+  for (let i = 0; i < output.length; i++) output[i].result = aligned[i];
   return output;
 }
 // END CALCED ENGINE
