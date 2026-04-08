@@ -19,19 +19,19 @@ sqrt(4) km in miles                     # => 1.242742384
 200 + 10% - 50                          # => 170
 200 + 10% + 5%                          # => 231
 50% of (200 + 300)                      # => 250
-200 * 10%                               # => 20
+200 * 10%                               # =>  20
 
 # SI Prefixes in Expressions
 
-1k + 500                                # => 1_500
+1k + 500                                # =>    1_500
 2k * 3k                                 # => 6_000_000
-sqrt(1M)                                # => 1_000
-1k + 10%                                # => 1_100
+sqrt(1M)                                # =>    1_000
+1k + 10%                                # =>    1_100
 
 # Variables with Conversions
 
 dist = 100                              # => 100
-dist km in miles                        # => 62.13711922
+dist km in miles                        # =>  62.13711922
 
 # Variables with Percentages
 
@@ -41,7 +41,7 @@ price + 15%                             # => 230
 # Variables with Functions
 
 val = 16                                # => 16
-sqrt(val)                               # => 4
+sqrt(val)                               # =>  4
 
 # Variable Chains
 
@@ -52,28 +52,28 @@ a + b + c                               # => 55
 
 # Text Labels with Expressions
 
-monthly 10 + yearly 5                   # => 15
-distance 100 km in miles                # => 62.13711922
+monthly 10 + yearly 5                   # =>  15
+distance 100 km in miles                # =>  62.13711922
 fee 200 + 15%                           # => 230
-answer sqrt(16)                         # => 4
+answer sqrt(16)                         # =>   4
 
 # Text with Trailing Annotations
 
 1500 (monthly rent)                     # => 1_500
-100 (plus tax)                          # => 100
+100 (plus tax)                          # =>   100
 
 # Parenthesized Text Labels
 
-(just) 100                              # => 100
-(note) 100 + 50                         # => 150
+(just) 100                              # =>   100
+(note) 100 + 50                         # =>   150
 rent (monthly) 1500                     # => 1_500
-(tax) 200 + 10%                         # => 220
-(weight) 150 lb in kg                   # => 68.0388
-(area) sqrt(144)                        # => 12
+(tax) 200 + 10%                         # =>   220
+(weight) 150 lb in kg                   # =>    68.0388
+(area) sqrt(144)                        # =>    12
 (note) 1k + 500                         # => 1_500
-(first) 10 + (second) 20                # => 30
-((deep)) 100                            # => 100
-(foo) (bar) 100                         # => 100
+(first) 10 + (second) 20                # =>    30
+((deep)) 100                            # =>   100
+(foo) (bar) 100                         # =>   100
 
 # Date Arithmetic with Expressions
 
@@ -107,7 +107,7 @@ gap 2025-03-01 - 2025-01-01             # => 59
 # Date Difference in Expressions
 
 (2025-03-01 - 2025-01-01) * 24          # => 1_416
-(2025-03-01 - 2025-01-01) + 10          # => 69
+(2025-03-01 - 2025-01-01) + 10          # =>    69
 (2025-03-01 - 2025-01-01) days in hr    # => 1_416
 
 # Constants in Expressions

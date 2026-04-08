@@ -6,7 +6,7 @@
 @format = scientific(5)
 1234.5678                               # => 1.2346e+03
 @format = auto(4)
-1234.5678                               # => 1235
+1234.5678                               # =>  1235
 @format = minSig(5)
 1234.5678                               # => 1_234.6
 @format = minSig

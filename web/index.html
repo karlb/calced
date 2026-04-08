@@ -978,6 +978,62 @@ function highlightLine(text, cls) {
 }
 
 const RESULT_RE = /\s{2,}# => .*$/;
+const ALIGNABLE_RE = /^-?[\d_, ]+(\.\d+)?$/;
+
+function splitSections(output, lines) {
+  const sections = [];
+  let cur = [];
+  for (let i = 0; i < output.length; i++) {
+    if (output[i].result === null && lines[i].trim().startsWith("#")) {
+      if (cur.length) sections.push(cur);
+      cur = [i];
+    } else {
+      cur.push(i);
+    }
+  }
+  if (cur.length) sections.push(cur);
+  return sections;
+}
+
+function alignDecimalPoints(output, lines, mode) {
+  // mode: "frac" for web (right-pad frac, used with text-align:right)
+  //        "int" for file export (left-pad int part)
+  const aligned = output.map(o => o.result);
+  const sections = splitSections(output, lines);
+
+  for (const sec of sections) {
+    const info = [];
+    for (const i of sec) {
+      const r = aligned[i];
+      if (r !== null && ALIGNABLE_RE.test(r)) {
+        const dot = r.indexOf(".");
+        const intW = dot >= 0 ? dot : r.length;
+        const fracW = r.length - intW;
+        info.push({ i, intW, fracW });
+      }
+    }
+    if (info.length < 2) continue;
+    const maxIntW = Math.max(...info.map(x => x.intW));
+    const maxFracW = Math.max(...info.map(x => x.fracW));
+    const maxLen = Math.max(...info.map(x => x.intW + x.fracW));
+    if (mode === "frac") {
+      const minFracW = Math.min(...info.map(x => x.fracW));
+      const effMaxFrac = Math.min(maxFracW, Math.max(maxLen + 3 - maxIntW, 0), minFracW + 3);
+      for (const x of info) {
+        const pad = Math.max(effMaxFrac - x.fracW, 0);
+        if (pad > 0) aligned[x.i] = aligned[x.i] + "\u00a0".repeat(pad);
+      }
+    } else {
+      const minIntW = Math.min(...info.map(x => x.intW));
+      const effMaxInt = Math.min(maxIntW, Math.max(maxLen + 3 - maxFracW, 0), minIntW + 3);
+      for (const x of info) {
+        const pad = Math.max(effMaxInt - x.intW, 0);
+        if (pad > 0) aligned[x.i] = " ".repeat(pad) + aligned[x.i];
+      }
+    }
+  }
+  return aligned;
+}
 
 function processText(text) {
   const lines = text.split("\n");
@@ -1100,8 +1156,9 @@ function render() {
   if (cleaned !== text) input.value = cleaned;
   const lines = cleaned.split("\n");
   const output = processText(cleaned);
-  results.innerHTML = output.map(o =>
-    '<div class="result-line">' + (o.result !== null ? escapeHTML(o.result) : '') + '</div>'
+  const aligned = alignDecimalPoints(output, lines, "frac");
+  results.innerHTML = aligned.map(r =>
+    '<div class="result-line">' + (r !== null ? escapeHTML(r) : '') + '</div>'
   ).join("");
   highlight.innerHTML = output.map((o, i) =>
     '<div class="hl-line">' + highlightLine(lines[i], o.cls) + '</div>'
@@ -1180,16 +1237,25 @@ async function loadFromHash() {
 function formatForFile(text) {
   const lines = text.split("\n");
   const output = processText(text);
-  const resultLines = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (output[i].result !== null) resultLines.push(lines[i]);
+  const aligned = alignDecimalPoints(output, lines, "int");
+
+  // Per-section column alignment (match Python CLI behavior)
+  const sections = splitSections(output, lines);
+
+  const formatted = new Array(lines.length);
+  for (const sec of sections) {
+    const resultIdxs = sec.filter(i => output[i].result !== null);
+    const maxLen = resultIdxs.length ? Math.max(...resultIdxs.map(i => lines[i].length)) : 0;
+    const align = Math.max(maxLen + 2, 40);
+    for (const i of sec) {
+      if (output[i].result !== null) {
+        formatted[i] = lines[i].padEnd(align) + "# => " + aligned[i];
+      } else {
+        formatted[i] = lines[i];
+      }
+    }
   }
-  const maxLen = resultLines.length ? Math.max(...resultLines.map(l => l.length)) : 0;
-  const align = Math.max(maxLen + 2, 40);
-  return lines.map((line, i) => {
-    if (output[i].result !== null) return line.padEnd(align) + "# => " + output[i].result;
-    return line;
-  }).join("\n");
+  return formatted.join("\n");
 }
 
 function downloadFile() {

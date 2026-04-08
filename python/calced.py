@@ -20,6 +20,7 @@ RESULT_RE = re.compile(r"\s+# => .*$")
 DIRECTIVE_RE = re.compile(r"^@(format|separator)\s*=\s*(.+)$", re.IGNORECASE)
 FORMAT_RE = re.compile(r"^(minSig|fixed|scientific|auto)(?:\((\d+)\))?$", re.IGNORECASE)
 RATE_RE = re.compile(r"^@rate\s+(\w+)/(\w+)\s*=\s*(.+)$", re.IGNORECASE)
+ALIGNABLE_RE = re.compile(r"^-?[\d_, ]+(\.\d+)?$")
 
 # --- Date/time support ---
 DATE = "DATE"
@@ -1171,11 +1172,45 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
             align = max(max_len + 2, 40)
         else:
             align = 40
-        out = []
-        col = []
+
+        # First pass: format all results and compute decimal alignment info
+        fmt_results = []
         for clean, result, opts, vsnap in section:
             if result is not None:
                 fmt_str = format_result(result, opts)
+                if ALIGNABLE_RE.match(fmt_str):
+                    dot = fmt_str.find(".")
+                    int_w = dot if dot >= 0 else len(fmt_str)
+                    frac_w = len(fmt_str) - int_w
+                else:
+                    int_w = frac_w = None
+                fmt_results.append((fmt_str, int_w, frac_w))
+            else:
+                fmt_results.append((None, None, None))
+
+        # Compute effective max integer width with bloat cap (max 3 extra chars)
+        alignable = [(f, iw, fw) for f, iw, fw in fmt_results if iw is not None]
+        if len(alignable) >= 2:
+            max_int_w = max(iw for _, iw, _ in alignable)
+            min_int_w = min(iw for _, iw, _ in alignable)
+            max_frac_w = max(fw for _, _, fw in alignable)
+            max_result_len = max(len(f) for f, _, _ in alignable)
+            eff_max_int = min(
+                max_int_w,
+                max(max_result_len + 3 - max_frac_w, 0),
+                min_int_w + 3,
+            )
+        else:
+            eff_max_int = 0
+
+        out = []
+        col = []
+        for (clean, result, opts, vsnap), (fmt_raw, int_w, frac_w) in zip(section, fmt_results):
+            if result is not None:
+                fmt_str = fmt_raw
+                if int_w is not None and eff_max_int > 0:
+                    pad = max(eff_max_int - int_w, 0)
+                    fmt_str = " " * pad + fmt_str
                 out.append(f"{clean.ljust(align)}# => {fmt_str}")
                 if use_color:
                     col.append(
