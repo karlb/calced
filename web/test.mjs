@@ -70,6 +70,7 @@ if (unitFailures) {
 
 
 const RESULT_RE = /\s+# => .*$/;
+const INDICATOR_RE = / [│┘]$/;
 
 let totalTests = 0;
 let totalPassed = 0;
@@ -93,7 +94,7 @@ for (const file of files) {
     if (m) {
       const clean = line.replace(RESULT_RE, "").trimEnd();
       inputLines.push(clean);
-      const expStr = m[0].replace(/^\s+# => /, "");
+      const expStr = m[0].replace(/^\s+# => /, "").replace(INDICATOR_RE, "");
       expected.push({ lineNum: i + 1, expected: expStr });
     } else {
       inputLines.push(line);

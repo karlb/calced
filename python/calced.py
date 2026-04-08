@@ -512,7 +512,7 @@ def colorize_expr(text, variables, rates=None):
     return "".join(parts)
 
 
-def colorize_line(line, result, fmt_result_str, align, variables, rates=None):
+def colorize_line(line, result, fmt_result_str, align, variables, rates=None, indicator=None):
     """Return a colorized version of an output line."""
     stripped = line.strip()
     if result is not None:
@@ -520,6 +520,7 @@ def colorize_line(line, result, fmt_result_str, align, variables, rates=None):
         # Reconstruct with leading whitespace preserved
         leading = line[: len(line) - len(line.lstrip())]
         pad = max(align - len(line.rstrip()), 2)
+        suffix = f" {DIM}{indicator}{RESET}" if indicator else ""
         return (
             leading
             + colored_expr
@@ -530,6 +531,7 @@ def colorize_line(line, result, fmt_result_str, align, variables, rates=None):
             + GREEN
             + fmt_result_str
             + RESET
+            + suffix
         )
     if stripped.startswith("#"):
         return BOLD + line + RESET
@@ -1094,7 +1096,7 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
     rates = {}
     results_acc = []  # for total/sum accumulation
     fmt_opts = {"mode": "minSig", "precision": 10, "separator": "underscore"}
-    evaluated = []  # list of (clean_line, result_or_none, fmt_opts_snapshot, vars_snapshot)
+    evaluated = []  # list of (clean_line, result_or_none, fmt_opts_snapshot, vars_snapshot, is_total)
 
     for line in lines:
         clean = RESULT_RE.sub("", line).rstrip()
@@ -1106,7 +1108,7 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
             fr = rm.group(1).lower()
             to = rm.group(2).lower()
             rates[(fr, to)] = Decimal(rm.group(3).strip())
-            evaluated.append((clean, None, None, None))
+            evaluated.append((clean, None, None, None, False))
             continue
 
         # Check for format directives
@@ -1134,19 +1136,19 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
                 v = val.lower()
                 if v in ("off", "underscore", "comma", "space"):
                     fmt_opts["separator"] = v
-            evaluated.append((clean, None, None, None))
+            evaluated.append((clean, None, None, None, False))
             continue
 
         # Header lines reset the accumulator
         if stripped.startswith("#"):
             results_acc.clear()
-            evaluated.append((clean, None, None, None))
+            evaluated.append((clean, None, None, None, False))
             continue
 
         # Empty lines
         if not stripped:
             results_acc.append(None)
-            evaluated.append(("", None, None, None))
+            evaluated.append(("", None, None, None, False))
             continue
 
         vars_before = dict(variables)
@@ -1155,18 +1157,18 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
         if result == "TOTAL":
             total = sum(r for r in results_acc if r is not None and not isinstance(r, datetime.date))
             results_acc.append(total)
-            evaluated.append((clean, total, dict(fmt_opts), vars_before))
+            evaluated.append((clean, total, dict(fmt_opts), vars_before, True))
         elif result is not None:
             results_acc.append(result)
-            evaluated.append((clean, result, dict(fmt_opts), vars_before))
+            evaluated.append((clean, result, dict(fmt_opts), vars_before, False))
         else:
             results_acc.append(None)
-            evaluated.append((clean, None, None, None))
+            evaluated.append((clean, None, None, None, False))
 
     # Format output with per-section alignment (sections split at header lines)
     def _flush_section(section):
         """Compute alignment for a section and format its lines."""
-        result_lines = [c for c, r, _, _ in section if r is not None]
+        result_lines = [c for c, r, _, _, _ in section if r is not None]
         if result_lines:
             max_len = max(len(l) for l in result_lines)
             align = max(max_len + 2, 40)
@@ -1175,7 +1177,7 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
 
         # First pass: format all results and compute decimal alignment info
         fmt_results = []
-        for clean, result, opts, vsnap in section:
+        for clean, result, opts, vsnap, is_total in section:
             if result is not None:
                 fmt_str = format_result(result, opts)
                 if ALIGNABLE_RE.match(fmt_str):
@@ -1203,18 +1205,33 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
         else:
             eff_max_int = 0
 
+        # Compute total indicators (│ for contributors, ┘ for total lines)
+        indicators = [None] * len(section)
+        for i, (_, _, _, _, is_total) in enumerate(section):
+            if is_total:
+                indicators[i] = "┘"
+                # Mark prior result lines back to previous total or section start
+                for j in range(i - 1, -1, -1):
+                    _, r, _, _, jt = section[j]
+                    if jt:
+                        break  # stop at previous total
+                    if r is not None:
+                        indicators[j] = "│"
+
         out = []
         col = []
-        for (clean, result, opts, vsnap), (fmt_raw, int_w, frac_w) in zip(section, fmt_results):
+        for idx, ((clean, result, opts, vsnap, is_total), (fmt_raw, int_w, frac_w)) in enumerate(zip(section, fmt_results)):
+            indicator = indicators[idx]
             if result is not None:
                 fmt_str = fmt_raw
                 if int_w is not None and eff_max_int > 0:
                     pad = max(eff_max_int - int_w, 0)
                     fmt_str = " " * pad + fmt_str
-                out.append(f"{clean.ljust(align)}# => {fmt_str}")
+                suffix = f" {indicator}" if indicator else ""
+                out.append(f"{clean.ljust(align)}# => {fmt_str}{suffix}")
                 if use_color:
                     col.append(
-                        colorize_line(clean, result, fmt_str, align, vsnap, rates=rates)
+                        colorize_line(clean, result, fmt_str, align, vsnap, rates=rates, indicator=indicator)
                     )
             else:
                 out.append(clean)
@@ -1226,7 +1243,7 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
     colored_output = []
     current_section = []
     for entry in evaluated:
-        clean, result, opts, vsnap = entry
+        clean, result, opts, vsnap, _ = entry
         # Header lines start a new section
         if result is None and clean.strip().startswith("#"):
             if current_section:

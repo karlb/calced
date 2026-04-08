@@ -83,6 +83,12 @@ header div { display: flex; gap: 8px; }
   line-height: 1.7; text-align: right;
   color: var(--result); white-space: nowrap; overflow: hidden;
 }
+.result-line.summed {
+  background: color-mix(in srgb, var(--result) 8%, transparent);
+}
+.result-line.total-line {
+  border-top: 1px solid var(--dim);
+}
 #cheatsheet {
   background: var(--header-bg); border-bottom: 1px solid var(--border);
   padding: 12px 20px 16px; font-size: 0.85em;
@@ -995,6 +1001,25 @@ function splitSections(output, lines) {
   return sections;
 }
 
+function computeTotalIndicators(output, lines) {
+  // Returns array: null, "summed", or "total" per line
+  const indicators = new Array(output.length).fill(null);
+  const sections = splitSections(output, lines);
+  for (const sec of sections) {
+    for (const i of sec) {
+      if (output[i].isTotal) {
+        indicators[i] = "total";
+        for (let j = sec.indexOf(i) - 1; j >= 0; j--) {
+          const k = sec[j];
+          if (output[k].isTotal) break;
+          if (output[k].result !== null) indicators[k] = "summed";
+        }
+      }
+    }
+  }
+  return indicators;
+}
+
 function alignDecimalPoints(output, lines, mode) {
   // mode: "frac" for web (right-pad frac, used with text-align:right)
   //        "int" for file export (left-pad int part)
@@ -1089,7 +1114,7 @@ function processText(text) {
     if (result === "TOTAL") {
       const total = resultsAcc.reduce((s, r) => r !== null && !_isDateObj(r) ? s.plus(r) : s, new Big(0));
       resultsAcc.push(total);
-      output.push({ result: formatResult(total, { ...fmtOpts }), cls });
+      output.push({ result: formatResult(total, { ...fmtOpts }), cls, isTotal: true });
     } else if (result !== null) {
       resultsAcc.push(result);
       output.push({ result: formatResult(result, { ...fmtOpts }), cls });
@@ -1157,9 +1182,13 @@ function render() {
   const lines = cleaned.split("\n");
   const output = processText(cleaned);
   const aligned = alignDecimalPoints(output, lines, "frac");
-  results.innerHTML = aligned.map(r =>
-    '<div class="result-line">' + (r !== null ? escapeHTML(r) : '') + '</div>'
-  ).join("");
+  const indicators = computeTotalIndicators(output, lines);
+  results.innerHTML = aligned.map((r, i) => {
+    const cls = ["result-line"];
+    if (indicators[i] === "summed") cls.push("summed");
+    if (indicators[i] === "total") cls.push("total-line");
+    return '<div class="' + cls.join(" ") + '">' + (r !== null ? escapeHTML(r) : '') + '</div>';
+  }).join("");
   highlight.innerHTML = output.map((o, i) =>
     '<div class="hl-line">' + highlightLine(lines[i], o.cls) + '</div>'
   ).join("");
@@ -1238,6 +1267,7 @@ function formatForFile(text) {
   const lines = text.split("\n");
   const output = processText(text);
   const aligned = alignDecimalPoints(output, lines, "int");
+  const indicators = computeTotalIndicators(output, lines);
 
   // Per-section column alignment (match Python CLI behavior)
   const sections = splitSections(output, lines);
@@ -1249,7 +1279,8 @@ function formatForFile(text) {
     const align = Math.max(maxLen + 2, 40);
     for (const i of sec) {
       if (output[i].result !== null) {
-        formatted[i] = lines[i].padEnd(align) + "# => " + aligned[i];
+        const ind = indicators[i] === "summed" ? " │" : indicators[i] === "total" ? " ┘" : "";
+        formatted[i] = lines[i].padEnd(align) + "# => " + aligned[i] + ind;
       } else {
         formatted[i] = lines[i];
       }
