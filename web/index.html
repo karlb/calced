@@ -1280,10 +1280,19 @@ function formatForFile(text) {
     const resultIdxs = sec.filter(i => output[i].result !== null);
     const maxLen = resultIdxs.length ? Math.max(...resultIdxs.map(i => lines[i].length)) : 0;
     const align = Math.max(maxLen + 2, 40);
+    // Compute max result width among indicator-bearing lines for alignment
+    let maxIndW = 0;
+    for (const i of sec) {
+      if (output[i].result !== null && indicators[i]) {
+        maxIndW = Math.max(maxIndW, aligned[i].length);
+      }
+    }
     for (const i of sec) {
       if (output[i].result !== null) {
+        const hasInd = indicators[i];
         const ind = indicators[i] === "summed" ? " │" : indicators[i] === "total" ? " ┘" : "";
-        formatted[i] = lines[i].padEnd(align) + "# => " + aligned[i] + ind;
+        const padded = hasInd ? aligned[i].padEnd(maxIndW) : aligned[i];
+        formatted[i] = lines[i].padEnd(align) + "# => " + padded + ind;
       } else {
         formatted[i] = lines[i];
       }

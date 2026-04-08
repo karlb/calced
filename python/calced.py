@@ -1219,20 +1219,39 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
                     if r is not None:
                         indicators[j] = "│"
 
-        out = []
-        col = []
-        for idx, ((clean, result, opts, vsnap, is_total), (fmt_raw, int_w, frac_w)) in enumerate(zip(section, fmt_results)):
-            indicator = indicators[idx]
-            if result is not None:
+        # Compute padded fmt_str for each line
+        padded_fmts = []
+        for (fmt_raw, int_w, frac_w) in fmt_results:
+            if fmt_raw is not None:
                 fmt_str = fmt_raw
                 if int_w is not None and eff_max_int > 0:
                     pad = max(eff_max_int - int_w, 0)
                     fmt_str = " " * pad + fmt_str
-                suffix = f" {indicator}" if indicator else ""
-                out.append(f"{clean.ljust(align)}# => {fmt_str}{suffix}")
+                padded_fmts.append(fmt_str)
+            else:
+                padded_fmts.append(None)
+
+        # Compute max result width among lines with indicators for alignment
+        max_indicator_w = 0
+        for idx, fmt_str in enumerate(padded_fmts):
+            if indicators[idx] and fmt_str is not None:
+                max_indicator_w = max(max_indicator_w, len(fmt_str))
+
+        out = []
+        col = []
+        for idx, ((clean, result, opts, vsnap, is_total), fmt_str) in enumerate(zip(section, padded_fmts)):
+            indicator = indicators[idx]
+            if result is not None:
+                if indicator:
+                    padded = fmt_str.ljust(max_indicator_w)
+                    suffix = f" {indicator}"
+                else:
+                    padded = fmt_str
+                    suffix = ""
+                out.append(f"{clean.ljust(align)}# => {padded}{suffix}")
                 if use_color:
                     col.append(
-                        colorize_line(clean, result, fmt_str, align, vsnap, rates=rates, indicator=indicator)
+                        colorize_line(clean, result, padded, align, vsnap, rates=rates, indicator=indicator)
                     )
             else:
                 out.append(clean)
