@@ -1158,6 +1158,7 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
             total = sum(r for r in results_acc if r is not None and not isinstance(r, datetime.date))
             results_acc.append(total)
             evaluated.append((clean, total, dict(fmt_opts), vars_before, True))
+            results_acc.clear()
         elif result is not None:
             results_acc.append(result)
             evaluated.append((clean, result, dict(fmt_opts), vars_before, False))
@@ -1370,6 +1371,7 @@ def process_json(content):
             total = sum(r for r in results_acc if r is not None and not isinstance(r, datetime.date))
             results_acc.append(total)
             output.append({"input": clean, "result": float(total)})
+            results_acc.clear()
         elif result is not None:
             results_acc.append(result)
             if isinstance(result, datetime.date):

@@ -1115,6 +1115,7 @@ function processText(text) {
       const total = resultsAcc.reduce((s, r) => r !== null && !_isDateObj(r) ? s.plus(r) : s, new Big(0));
       resultsAcc.push(total);
       output.push({ result: formatResult(total, { ...fmtOpts }), cls, isTotal: true });
+      resultsAcc = [];
     } else if (result !== null) {
       resultsAcc.push(result);
       output.push({ result: formatResult(result, { ...fmtOpts }), cls });
