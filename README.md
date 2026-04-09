@@ -80,10 +80,10 @@ total
 """)
 ]]] -->
 ```
-rent 1500                               # => 1_500
-groceries 200 + 150                     # => 350
-utilities 80 + 45 + 30                  # => 155
-total                                   # => 2_005
+rent 1500                               # => 1_500 │
+groceries 200 + 150                     # =>   350 │
+utilities 80 + 45 + 30                  # =>   155 │
+total                                   # => 2_005 ┘
 ```
 <sub>[Try in web app](https://calced.karl.berlin/0/#K0rNK1EwNDUw4Eovyk9OLcpMLVYwMjBQ0AYJcpWWZOZkloDELEBCJqZAwtiAqyS_JDGHCwA)</sub>
 <!-- [[[end]]] -->
@@ -103,10 +103,10 @@ run_calced("""
 """)
 ]]] -->
 ```
-2 + 3                                   # => 5
-10 * (4 + 6)                            # => 100
+2 + 3                                   # =>     5
+10 * (4 + 6)                            # =>   100
 2 ^ 10                                  # => 1_024
-17 % 5                                  # => 2
+17 % 5                                  # =>     2
 ```
 <sub>[Try in web app](https://calced.karl.berlin/0/#M1LQVjDmMjRQ0FLQMAGyzTS5jBTiFAwNuAzNFVQVTLkA)</sub>
 <!-- [[[end]]] -->
@@ -123,7 +123,7 @@ after_tax = income - tax
 ]]] -->
 ```
 income = 5000                           # => 5_000
-tax_rate = 22%                          # => 0.22
+tax_rate = 22%                          # =>     0.22
 tax = income * tax_rate                 # => 1_100
 after_tax = income - tax                # => 3_900
 ```
@@ -144,7 +144,7 @@ run_calced("""
 50% of 300                              # => 150
 200 + 15%                               # => 230
 200 - 10%                               # => 180
-10 as % of 50                           # => 20
+10 as % of 50                           # =>  20
 ```
 <sub>[Try in web app](https://calced.karl.berlin/0/#MzVQVchPUzA2MOAyMjBQ0FYwNFUFs3QVDA1UuQwNFBKLFcBKTA24AA)</sub>
 <!-- [[[end]]] -->
@@ -160,10 +160,10 @@ run_calced("""
 """)
 ]]] -->
 ```
-1k                                      # => 1_000
-1M                                      # => 1_000_000
+1k                                      # =>         1_000
+1M                                      # =>     1_000_000
 1.5G                                    # => 1_500_000_000
-500n * 2                                # => 0.000001
+500n * 2                                # =>             0.000001
 ```
 <sub>[Try in web app](https://calced.karl.berlin/0/#M8zmMvTlMtQzdecyNTDIU9BSMOICAA)</sub>
 <!-- [[[end]]] -->
@@ -182,11 +182,11 @@ run_calced("""
 """)
 ]]] -->
 ```
-5 km in miles                           # => 3.106855961
-100 C in F                              # => 212
+5 km in miles                           # =>     3.106855961
+100 C in F                              # =>   212
 1 gib in mib                            # => 1_024
-60 min in hr                            # => 1
-1 gal in l                              # => 3.78541
+60 min in hr                            # =>     1
+1 gal in l                              # =>     3.78541
 ```
 <sub>[Try in web app](https://calced.karl.berlin/0/#M1XIzlXIzFPIzcxJLeYyNDBQcAZx3bgMFdIzkyAySVxmBkAqD8TLKALJJOaA2DlcAA)</sub>
 <!-- [[[end]]] -->
@@ -284,10 +284,10 @@ total
 """)
 ]]] -->
 ```
-rent 1500                               # => 1_500
-groceries 350                           # => 350
-utilities 155                           # => 155
-total                                   # => 2_005
+rent 1500                               # => 1_500 │
+groceries 350                           # =>   350 │
+utilities 155                           # =>   155 │
+total                                   # => 2_005 ┘
 ```
 <sub>[Try in web app](https://calced.karl.berlin/0/#K0rNK1EwNDUw4Eovyk9OLcpMLVYwNjXgKi3JzMksAfEMTU25SvJLEnO4AA)</sub>
 <!-- [[[end]]] -->
