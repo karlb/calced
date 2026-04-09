@@ -51,3 +51,5 @@ New tests should use `.md` fixture files or add vectors to the JSON files — th
 ## Cross-Language Consistency
 
 Features must work identically in both Python and JS. When implementing a change, check both implementations and run `make test` to verify both pass. The `.md` integration tests and JSON vectors are shared across both.
+
+For non-trivial features, consider using separate agents for the Python and JS implementations, then run `make test` to verify both pass.
