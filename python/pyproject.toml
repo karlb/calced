@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "calced"
-version = "0.4.0"
+version = "0.5.0"
 requires-python = ">=3.9"
 description = "A notepad calculator that evaluates expressions in text files"
 readme = "README.md"
