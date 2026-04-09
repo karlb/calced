@@ -94,7 +94,7 @@ for (const file of files) {
     if (m) {
       const clean = line.replace(RESULT_RE, "").trimEnd();
       inputLines.push(clean);
-      const expStr = m[0].replace(/^\s+# => /, "").replace(INDICATOR_RE, "");
+      const expStr = m[0].replace(/^\s+# => /, "").replace(INDICATOR_RE, "").trimEnd();
       expected.push({ lineNum: i + 1, expected: expStr });
     } else {
       inputLines.push(line);
