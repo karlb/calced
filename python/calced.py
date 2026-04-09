@@ -1199,18 +1199,11 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
             else:
                 fmt_results.append((None, None, None))
 
-        # Compute effective max integer width with bloat cap (max 3 extra chars)
+        # Compute effective max integer width for decimal alignment
         alignable = [(f, iw, fw) for f, iw, fw in fmt_results if iw is not None]
         if len(alignable) >= 2:
             max_int_w = max(iw for _, iw, _ in alignable)
-            min_int_w = min(iw for _, iw, _ in alignable)
-            max_frac_w = max(fw for _, _, fw in alignable)
-            max_result_len = max(len(f) for f, _, _ in alignable)
-            eff_max_int = min(
-                max_int_w,
-                max(max_result_len + 3 - max_frac_w, 0),
-                min_int_w + 3,
-            )
+            eff_max_int = max_int_w
         else:
             eff_max_int = 0
 

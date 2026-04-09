@@ -33,12 +33,12 @@ round(pi, 2)                            # =>  3.14
 # Bloat Cap Limits Padding (max 3 chars per result)
 
 1M                                      # => 1_000_000
-5                                       # =>    5
+5                                       # =>         5
 
 # Sections Are Independent
 
 1000                                    # => 1_000
-5                                       # =>    5
+5                                       # =>     5
 
 # Scientific Notation Excluded (only 1 alignable → no padding)
 

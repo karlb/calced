@@ -1057,7 +1057,7 @@ function alignDecimalPoints(output, lines, mode) {
       }
     } else {
       const minIntW = Math.min(...info.map(x => x.intW));
-      const effMaxInt = Math.min(maxIntW, Math.max(maxLen + 3 - maxFracW, 0), minIntW + 3);
+      const effMaxInt = maxIntW;
       for (const x of info) {
         const pad = Math.max(effMaxInt - x.intW, 0);
         if (pad > 0) aligned[x.i] = " ".repeat(pad) + aligned[x.i];

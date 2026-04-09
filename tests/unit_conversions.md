@@ -1,10 +1,10 @@
 # Length
-5 km in miles                           # =>    3.106855961
-1 mi in km                              # =>    1.609344
-100 cm in inches                        # =>   39.37007874
-1 ft in cm                              # =>   30.48
+5 km in miles                           # =>     3.106855961
+1 mi in km                              # =>     1.609344
+100 cm in inches                        # =>    39.37007874
+1 ft in cm                              # =>    30.48
 1 mile in feet                          # => 5_280
-1 in in cm                              # =>    2.54
+1 in in cm                              # =>     2.54
 
 # Mass
 5 kg in lb                              # => 11.0231221

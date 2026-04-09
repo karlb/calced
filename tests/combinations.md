@@ -23,10 +23,10 @@ sqrt(4) km in miles                     # => 1.242742384
 
 # SI Prefixes in Expressions
 
-1k + 500                                # =>    1_500
+1k + 500                                # =>     1_500
 2k * 3k                                 # => 6_000_000
-sqrt(1M)                                # =>    1_000
-1k + 10%                                # =>    1_100
+sqrt(1M)                                # =>     1_000
+1k + 10%                                # =>     1_100
 
 # Variables with Conversions
 
