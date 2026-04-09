@@ -21,6 +21,8 @@ DIRECTIVE_RE = re.compile(r"^@(format|separator)\s*=\s*(.+)$", re.IGNORECASE)
 FORMAT_RE = re.compile(r"^(minSig|fixed|scientific|auto)(?:\((\d+)\))?$", re.IGNORECASE)
 RATE_RE = re.compile(r"^@rate\s+(\w+)/(\w+)\s*=\s*(.+)$", re.IGNORECASE)
 ALIGNABLE_RE = re.compile(r"^-?[\d_, ]+(\.\d+)?$")
+MODE_MAP = {"minsig": "minSig", "fixed": "fixed", "scientific": "scientific", "auto": "auto"}
+DEFAULT_FMT_OPTS = {"mode": "minSig", "precision": 10, "separator": "underscore"}
 
 # --- Date/time support ---
 DATE = "DATE"
@@ -1071,6 +1073,75 @@ def format_result(n, fmt_opts=None):
     return str(n)
 
 
+def _process_lines(content):
+    """Parse and evaluate lines, yielding (clean, result, fmt_opts_snapshot, vars_snapshot, is_total) tuples."""
+    lines = content.split("\n")
+    if lines and lines[-1] == "":
+        lines = lines[:-1]
+
+    variables = {}
+    rates = {}
+    results_acc = []
+    fmt_opts = dict(DEFAULT_FMT_OPTS)
+
+    for line in lines:
+        clean = RESULT_RE.sub("", line).rstrip()
+        stripped = clean.strip()
+
+        rm = RATE_RE.match(stripped)
+        if rm:
+            fr = rm.group(1).lower()
+            to = rm.group(2).lower()
+            rates[(fr, to)] = Decimal(rm.group(3).strip())
+            yield (clean, None, None, None, False)
+            continue
+
+        dm = DIRECTIVE_RE.match(stripped)
+        if dm:
+            key = dm.group(1).lower()
+            val = dm.group(2).strip()
+            if key == "format":
+                fm = FORMAT_RE.match(val)
+                if fm:
+                    mode = fm.group(1).lower()
+                    fmt_opts["mode"] = MODE_MAP.get(mode, mode)
+                    if fm.group(2) is not None:
+                        fmt_opts["precision"] = int(fm.group(2))
+                    else:
+                        fmt_opts["precision"] = 10 if mode == "minsig" else 3
+            elif key == "separator":
+                v = val.lower()
+                if v in ("off", "underscore", "comma", "space"):
+                    fmt_opts["separator"] = v
+            yield (clean, None, None, None, False)
+            continue
+
+        if stripped.startswith("#"):
+            results_acc.clear()
+            yield (clean, None, None, None, False)
+            continue
+
+        if not stripped:
+            results_acc.append(None)
+            yield ("", None, None, None, False)
+            continue
+
+        vars_before = dict(variables)
+        result, variables = evaluate_line(stripped, variables, rates=rates)
+
+        if result == "TOTAL":
+            total = sum(r for r in results_acc if r is not None and not isinstance(r, datetime.date))
+            results_acc.append(total)
+            yield (clean, total, dict(fmt_opts), vars_before, True)
+            results_acc.clear()
+        elif result is not None:
+            results_acc.append(result)
+            yield (clean, result, dict(fmt_opts), vars_before, False)
+        else:
+            results_acc.append(None)
+            yield (clean, None, None, None, False)
+
+
 def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_run=False):
     """Read, evaluate, and write back the file with results (or print to stdout)."""
     if stdin_content is not None:
@@ -1087,84 +1158,7 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
         and os.environ.get("TERM") != "dumb"
     )
 
-    lines = original.split("\n")
-    # Remove trailing empty element from split (file ended with \n)
-    if lines and lines[-1] == "":
-        lines = lines[:-1]
-
-    variables = {}
-    rates = {}
-    results_acc = []  # for total/sum accumulation
-    fmt_opts = {"mode": "minSig", "precision": 10, "separator": "underscore"}
-    evaluated = []  # list of (clean_line, result_or_none, fmt_opts_snapshot, vars_snapshot, is_total)
-
-    for line in lines:
-        clean = RESULT_RE.sub("", line).rstrip()
-        stripped = clean.strip()
-
-        # Check for rate directives
-        rm = RATE_RE.match(stripped)
-        if rm:
-            fr = rm.group(1).lower()
-            to = rm.group(2).lower()
-            rates[(fr, to)] = Decimal(rm.group(3).strip())
-            evaluated.append((clean, None, None, None, False))
-            continue
-
-        # Check for format directives
-        dm = DIRECTIVE_RE.match(stripped)
-        if dm:
-            key = dm.group(1).lower()
-            val = dm.group(2).strip()
-            if key == "format":
-                fm = FORMAT_RE.match(val)
-                if fm:
-                    mode = fm.group(1).lower()
-                    # Normalize mode name
-                    mode_map = {
-                        "minsig": "minSig",
-                        "fixed": "fixed",
-                        "scientific": "scientific",
-                        "auto": "auto",
-                    }
-                    fmt_opts["mode"] = mode_map.get(mode, mode)
-                    if fm.group(2) is not None:
-                        fmt_opts["precision"] = int(fm.group(2))
-                    else:
-                        fmt_opts["precision"] = 10 if mode == "minsig" else 3
-            elif key == "separator":
-                v = val.lower()
-                if v in ("off", "underscore", "comma", "space"):
-                    fmt_opts["separator"] = v
-            evaluated.append((clean, None, None, None, False))
-            continue
-
-        # Header lines reset the accumulator
-        if stripped.startswith("#"):
-            results_acc.clear()
-            evaluated.append((clean, None, None, None, False))
-            continue
-
-        # Empty lines
-        if not stripped:
-            results_acc.append(None)
-            evaluated.append(("", None, None, None, False))
-            continue
-
-        vars_before = dict(variables)
-        result, variables = evaluate_line(stripped, variables, rates=rates)
-
-        if result == "TOTAL":
-            total = sum(r for r in results_acc if r is not None and not isinstance(r, datetime.date))
-            results_acc.append(total)
-            evaluated.append((clean, total, dict(fmt_opts), vars_before, True))
-            results_acc.clear()
-        elif result is not None:
-            results_acc.append(result)
-            evaluated.append((clean, result, dict(fmt_opts), vars_before, False))
-        else:
-            results_acc.append(None)
-            evaluated.append((clean, None, None, None, False))
+    evaluated = list(_process_lines(original))
 
     # Format output with per-section alignment (sections split at header lines)
     def _flush_section(section):
@@ -1326,81 +1320,14 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
 
 def process_json(content):
     """Evaluate content and return structured results as a list of dicts."""
-    lines = content.split("\n")
-    if lines and lines[-1] == "":
-        lines = lines[:-1]
-
-    variables = {}
-    rates = {}
-    results_acc = []
-    fmt_opts = {"mode": "minSig", "precision": 10, "separator": "underscore"}
     output = []
-
-    for line in lines:
-        clean = RESULT_RE.sub("", line).rstrip()
-        stripped = clean.strip()
-
-        rm = RATE_RE.match(stripped)
-        if rm:
-            fr = rm.group(1).lower()
-            to = rm.group(2).lower()
-            rates[(fr, to)] = Decimal(rm.group(3).strip())
+    for clean, result, _opts, _vars, _is_total in _process_lines(content):
+        if result is None:
             output.append({"input": clean, "result": None})
-            continue
-
-        dm = DIRECTIVE_RE.match(stripped)
-        if dm:
-            key = dm.group(1).lower()
-            val = dm.group(2).strip()
-            if key == "format":
-                fm = FORMAT_RE.match(val)
-                if fm:
-                    mode = fm.group(1).lower()
-                    mode_map = {
-                        "minsig": "minSig",
-                        "fixed": "fixed",
-                        "scientific": "scientific",
-                        "auto": "auto",
-                    }
-                    fmt_opts["mode"] = mode_map.get(mode, mode)
-                    if fm.group(2) is not None:
-                        fmt_opts["precision"] = int(fm.group(2))
-                    else:
-                        fmt_opts["precision"] = 10 if mode == "minsig" else 3
-            elif key == "separator":
-                v = val.lower()
-                if v in ("off", "underscore", "comma", "space"):
-                    fmt_opts["separator"] = v
-            output.append({"input": clean, "result": None})
-            continue
-
-        if stripped.startswith("#"):
-            results_acc.clear()
-            output.append({"input": clean, "result": None})
-            continue
-
-        if not stripped:
-            results_acc.append(None)
-            output.append({"input": "", "result": None})
-            continue
-
-        result, variables = evaluate_line(stripped, variables, rates=rates)
-
-        if result == "TOTAL":
-            total = sum(r for r in results_acc if r is not None and not isinstance(r, datetime.date))
-            results_acc.append(total)
-            output.append({"input": clean, "result": float(total)})
-            results_acc.clear()
-        elif result is not None:
-            results_acc.append(result)
-            if isinstance(result, datetime.date):
-                output.append({"input": clean, "result": result.isoformat()})
-            else:
-                output.append({"input": clean, "result": float(result)})
+        elif isinstance(result, datetime.date):
+            output.append({"input": clean, "result": result.isoformat()})
         else:
-            results_acc.append(None)
-            output.append({"input": clean, "result": None})
-
+            output.append({"input": clean, "result": float(result)})
     return output
 
 
