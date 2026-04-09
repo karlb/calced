@@ -925,39 +925,36 @@ function classifyLine(text, variables, rates) {
     }
   }
   if (hasMath && active.size === 0) {
-    if (tokens.some(t => t[0] === "TOTAL")) {
-      for (let i = 0; i < tokens.length; i++) {
-        if (tokens[i][0] === "TOTAL") active.add(i);
-      }
+    let mathStart = 0;
+    if (tokens.length >= 3 && tokens[0][0] === "WORD" && tokens[1][0] === "EQ") {
+      active.add(0);
+      active.add(1);
+      mathStart = 2;
+    }
+
+    // Replace TOTAL tokens with NUM so _buildMath/_tryParse can handle them
+    tokens = tokens.map(t => t[0] === "TOTAL" ? ["NUM", new Big(0), t[2], t[3]] : t);
+
+    const [conversion, convStart] = _detectConversion(tokens, rates);
+    const eofIdx = tokens.length - 1;
+    if (conversion !== null) {
+      active.add(convStart);
+      active.add(convStart + 1);
+      active.add(convStart + 2);
+    }
+
+    const allVars = Object.create(null);
+    for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
+    if (variables) { for (const k in variables) allVars[k] = variables[k]; }
+    const [mathTokens, mathToOrig] = _buildMath(tokens, mathStart, convStart, eofIdx, allVars);
+    const [result, consumed] = _tryParse(mathTokens);
+
+    if (result !== null) {
+      for (let i = 0; i < consumed; i++) active.add(mathToOrig[i]);
     } else {
-      let mathStart = 0;
-      if (tokens.length >= 3 && tokens[0][0] === "WORD" && tokens[1][0] === "EQ") {
-        active.add(0);
-        active.add(1);
-        mathStart = 2;
-      }
-
-      const [conversion, convStart] = _detectConversion(tokens, rates);
-      const eofIdx = tokens.length - 1;
-      if (conversion !== null) {
-        active.add(convStart);
-        active.add(convStart + 1);
-        active.add(convStart + 2);
-      }
-
-      const allVars = Object.create(null);
-      for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
-      if (variables) { for (const k in variables) allVars[k] = variables[k]; }
-      const [mathTokens, mathToOrig] = _buildMath(tokens, mathStart, convStart, eofIdx, allVars);
-      const [result, consumed] = _tryParse(mathTokens);
-
-      if (result !== null) {
-        for (let i = 0; i < consumed; i++) active.add(mathToOrig[i]);
-      } else {
-        for (let i = 0; i < mathToOrig.length; i++) {
-          if (mathTokens[i][0] === "NUM" || mathTokens[i][0] === "PCT") {
-            active.add(mathToOrig[i]);
-          }
+      for (let i = 0; i < mathToOrig.length; i++) {
+        if (mathTokens[i][0] === "NUM" || mathTokens[i][0] === "PCT") {
+          active.add(mathToOrig[i]);
         }
       }
     }

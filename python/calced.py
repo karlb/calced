@@ -454,35 +454,36 @@ def classify_line(text, variables, rates=None):
             # Reduce parenthesized date sub-expressions for classification
             tokens = _reduce_date_subexprs(tokens, variables or {})
     if has_math and not active:
-        if any(t[0] == "TOTAL" for t in tokens if t[0] != "EOF"):
-            for idx, t in enumerate(tokens):
-                if t[0] == "TOTAL":
-                    active.add(idx)
+        math_start = 0
+        if len(tokens) >= 3 and tokens[0][0] == "WORD" and tokens[1][0] == "EQ":
+            active.add(0)
+            active.add(1)
+            math_start = 2
+
+        # Replace TOTAL tokens with NUM so _build_math/_try_parse can handle them
+        tokens = [
+            ("NUM", Decimal(0), t[2], t[3]) if t[0] == "TOTAL" else t
+            for t in tokens
+        ]
+
+        conversion, conv_start = _detect_conversion(tokens, rates=rates)
+        eof_idx = len(tokens) - 1
+        if conversion is not None:
+            active.update({conv_start, conv_start + 1, conv_start + 2})
+
+        all_vars = {**BUILTIN_CONSTS, **(variables or {})}
+        math_tokens, math_to_orig = _build_math(
+            tokens, math_start, conv_start, eof_idx, all_vars
+        )
+        result, consumed = _try_parse(math_tokens)
+
+        if result is not None:
+            for i in range(consumed):
+                active.add(math_to_orig[i])
         else:
-            math_start = 0
-            if len(tokens) >= 3 and tokens[0][0] == "WORD" and tokens[1][0] == "EQ":
-                active.add(0)
-                active.add(1)
-                math_start = 2
-
-            conversion, conv_start = _detect_conversion(tokens, rates=rates)
-            eof_idx = len(tokens) - 1
-            if conversion is not None:
-                active.update({conv_start, conv_start + 1, conv_start + 2})
-
-            all_vars = {**BUILTIN_CONSTS, **(variables or {})}
-            math_tokens, math_to_orig = _build_math(
-                tokens, math_start, conv_start, eof_idx, all_vars
-            )
-            result, consumed = _try_parse(math_tokens)
-
-            if result is not None:
-                for i in range(consumed):
-                    active.add(math_to_orig[i])
-            else:
-                for i, orig_idx in enumerate(math_to_orig):
-                    if math_tokens[i][0] in ("NUM", "PCT"):
-                        active.add(orig_idx)
+            for i, orig_idx in enumerate(math_to_orig):
+                if math_tokens[i][0] in ("NUM", "PCT"):
+                    active.add(orig_idx)
 
     spans = []
     pos = 0
