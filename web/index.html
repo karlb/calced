@@ -1047,19 +1047,14 @@ function alignDecimalPoints(output, lines, mode) {
     if (info.length < 2) continue;
     const maxIntW = Math.max(...info.map(x => x.intW));
     const maxFracW = Math.max(...info.map(x => x.fracW));
-    const maxLen = Math.max(...info.map(x => x.intW + x.fracW));
     if (mode === "frac") {
-      const minFracW = Math.min(...info.map(x => x.fracW));
-      const effMaxFrac = Math.min(maxFracW, Math.max(maxLen + 3 - maxIntW, 0), minFracW + 3);
       for (const x of info) {
-        const pad = Math.max(effMaxFrac - x.fracW, 0);
+        const pad = Math.max(maxFracW - x.fracW, 0);
         if (pad > 0) aligned[x.i] = aligned[x.i] + "\u00a0".repeat(pad);
       }
     } else {
-      const minIntW = Math.min(...info.map(x => x.intW));
-      const effMaxInt = maxIntW;
       for (const x of info) {
-        const pad = Math.max(effMaxInt - x.intW, 0);
+        const pad = Math.max(maxIntW - x.intW, 0);
         if (pad > 0) aligned[x.i] = " ".repeat(pad) + aligned[x.i];
       }
     }
