@@ -58,15 +58,20 @@ header div { display: flex; gap: 8px; }
   display: flex; min-height: 100%;
 }
 .input-wrap {
+  --pad: 16px;
   flex: 1 1 0; min-width: 0; min-height: 100%;
   display: grid; background: var(--surface);
 }
 .input-wrap > * {
-  grid-area: 1/1; padding: 12px 16px; font: inherit; line-height: 1.7;
+  grid-area: 1/1; padding: 12px var(--pad); font: inherit; line-height: 1.7;
   white-space: pre-wrap; tab-size: 4; overflow-wrap: break-word; word-break: break-all;
 }
 #highlight { pointer-events: none; color: var(--text); }
 .hl-line { min-height: 1lh; }
+.hl-line.line-hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  margin: 0 calc(-1 * var(--pad)); padding: 0 var(--pad);
+}
 #input {
   field-sizing: content; color: transparent; caret-color: var(--text);
   background: transparent; border: none; resize: none;
@@ -75,14 +80,21 @@ header div { display: flex; gap: 8px; }
 .hl-dim { color: var(--dim); }
 .hl-comment { font-weight: bold; }
 #results {
+  --pad: 16px;
   width: max-content; min-width: 10%; background: var(--surface);
-  border-left: 1px solid var(--border); padding: 12px 16px;
+  border-left: 1px solid var(--border); padding: 12px var(--pad);
   overflow: hidden;
 }
 .result-line {
   line-height: 1.7; text-align: right;
   color: var(--result); white-space: nowrap; overflow: hidden;
 }
+.result-line.line-hover, .result-line.summed, .result-line.total-line {
+  margin: 0 calc(-1 * var(--pad)); padding: 0 var(--pad);
+}
+.result-line.line-hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.result-line.summed { background: color-mix(in srgb, var(--result) 8%, transparent); }
+.result-line.total-line { border-top: 1px solid var(--dim); }
 #cheatsheet {
   background: var(--header-bg); border-bottom: 1px solid var(--border);
   padding: 12px 20px 16px; font-size: 0.85em;
@@ -1085,6 +1097,76 @@ function highlightLine(text, cls) {
 }
 
 const RESULT_RE = /\s{2,}# => .*$/;
+const ALIGNABLE_RE = /^-?[\d_, ]+(\.\d+)?$/;
+
+function splitSections(output, lines) {
+  const sections = [];
+  let cur = [];
+  for (let i = 0; i < output.length; i++) {
+    if (output[i].result === null && lines[i].trim().startsWith("#")) {
+      if (cur.length) sections.push(cur);
+      cur = [i];
+    } else {
+      cur.push(i);
+    }
+  }
+  if (cur.length) sections.push(cur);
+  return sections;
+}
+
+function computeTotalIndicators(output, lines) {
+  // Returns array: null, "summed", or "total" per line
+  const indicators = new Array(output.length).fill(null);
+  const sections = splitSections(output, lines);
+  for (const sec of sections) {
+    for (const i of sec) {
+      if (output[i].isTotal) {
+        indicators[i] = "total";
+        for (let j = sec.indexOf(i) - 1; j >= 0; j--) {
+          const k = sec[j];
+          if (output[k].isTotal) break;
+          if (output[k].result !== null) indicators[k] = "summed";
+        }
+      }
+    }
+  }
+  return indicators;
+}
+
+function alignDecimalPoints(output, lines, mode) {
+  // mode: "frac" for web (right-pad frac, used with text-align:right)
+  //        "int" for file export (left-pad int part)
+  const aligned = output.map(o => o.result);
+  const sections = splitSections(output, lines);
+
+  for (const sec of sections) {
+    const info = [];
+    for (const i of sec) {
+      const r = aligned[i];
+      if (r !== null && ALIGNABLE_RE.test(r)) {
+        const dot = r.indexOf(".");
+        const intW = dot >= 0 ? dot : r.length;
+        const fracW = r.length - intW;
+        info.push({ i, intW, fracW });
+      }
+    }
+    if (info.length < 2) continue;
+    const maxIntW = Math.max(...info.map(x => x.intW));
+    const maxFracW = Math.max(...info.map(x => x.fracW));
+    if (mode === "frac") {
+      for (const x of info) {
+        const pad = Math.max(maxFracW - x.fracW, 0);
+        if (pad > 0) aligned[x.i] = aligned[x.i] + "\u00a0".repeat(pad);
+      }
+    } else {
+      for (const x of info) {
+        const pad = Math.max(maxIntW - x.intW, 0);
+        if (pad > 0) aligned[x.i] = " ".repeat(pad) + aligned[x.i];
+      }
+    }
+  }
+  return aligned;
+}
 
 function processText(text) {
   const lines = text.split("\n");
@@ -1139,13 +1221,15 @@ function processText(text) {
     variables = newVars;
     if (result !== null) {
       resultsAcc.push(result);
-      output.push({ result: formatResult(result, { ...fmtOpts }), cls });
+      output.push({ result: formatResult(result, { ...fmtOpts }), cls, isTotal });
       if (isTotal) resultsAcc = [];
     } else {
       resultsAcc.push(null);
       output.push({ result: null, cls });
     }
   }
+  const aligned = alignDecimalPoints(output, lines, "int");
+  for (let i = 0; i < output.length; i++) output[i].result = aligned[i];
   return output;
 }
 // END CALCED ENGINE
@@ -1204,9 +1288,14 @@ function render() {
   if (cleaned !== text) input.value = cleaned;
   const lines = cleaned.split("\n");
   const output = processText(cleaned);
-  results.innerHTML = output.map(o =>
-    '<div class="result-line">' + (o.result !== null ? escapeHTML(o.result) : '') + '</div>'
-  ).join("");
+  const aligned = alignDecimalPoints(output, lines, "frac");
+  const indicators = computeTotalIndicators(output, lines);
+  results.innerHTML = aligned.map((r, i) => {
+    const cls = ["result-line"];
+    if (indicators[i] === "summed") cls.push("summed");
+    if (indicators[i] === "total") cls.push("total-line");
+    return '<div class="' + cls.join(" ") + '">' + (r !== null ? escapeHTML(r) : '') + '</div>';
+  }).join("");
   highlight.innerHTML = output.map((o, i) =>
     '<div class="hl-line">' + highlightLine(lines[i], o.cls) + '</div>'
   ).join("");
@@ -1214,7 +1303,7 @@ function render() {
   const hlLines = highlight.children;
   const resLines = results.children;
   for (let i = 0; i < hlLines.length && i < resLines.length; i++) {
-    resLines[i].style.height = hlLines[i].offsetHeight + 'px';
+    resLines[i].style.height = hlLines[i].getBoundingClientRect().height + 'px';
   }
   scheduleHashUpdate();
   try { localStorage.setItem("calced-input", text); } catch(e) {}
@@ -1224,6 +1313,41 @@ function render() {
 
 input.addEventListener("input", render);
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !cheatsheet.hidden) toggleDocs(); });
+
+// --- Line hover highlight ---
+let hoveredIdx = -1;
+const editorInner = document.querySelector(".editor-inner");
+function setHoveredLine(idx) {
+  if (idx === hoveredIdx) return;
+  if (hoveredIdx >= 0) {
+    highlight.children[hoveredIdx]?.classList.remove("line-hover");
+    results.children[hoveredIdx]?.classList.remove("line-hover");
+  }
+  hoveredIdx = idx;
+  if (hoveredIdx >= 0) {
+    highlight.children[hoveredIdx]?.classList.add("line-hover");
+    results.children[hoveredIdx]?.classList.add("line-hover");
+  }
+}
+editorInner.addEventListener("mousemove", e => {
+  const resLine = e.target.closest(".result-line");
+  if (resLine) {
+    setHoveredLine([...results.children].indexOf(resLine));
+    return;
+  }
+  // Over input area: find line by Y position
+  const resChildren = results.children;
+  if (!resChildren.length) return;
+  const y = e.clientY;
+  for (let i = resChildren.length - 1; i >= 0; i--) {
+    if (y >= resChildren[i].getBoundingClientRect().top) {
+      setHoveredLine(i);
+      return;
+    }
+  }
+  setHoveredLine(-1);
+});
+editorInner.addEventListener("mouseleave", () => setHoveredLine(-1));
 
 // --- URL Hash Encoding ---
 let hashTimer = null;
@@ -1284,16 +1408,36 @@ async function loadFromHash() {
 function formatForFile(text) {
   const lines = text.split("\n");
   const output = processText(text);
-  const resultLines = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (output[i].result !== null) resultLines.push(lines[i]);
+  const aligned = alignDecimalPoints(output, lines, "int");
+  const indicators = computeTotalIndicators(output, lines);
+
+  // Per-section column alignment (match Python CLI behavior)
+  const sections = splitSections(output, lines);
+
+  const formatted = new Array(lines.length);
+  for (const sec of sections) {
+    const resultIdxs = sec.filter(i => output[i].result !== null);
+    const maxLen = resultIdxs.length ? Math.max(...resultIdxs.map(i => lines[i].length)) : 0;
+    const align = Math.max(maxLen + 2, 40);
+    // Compute max result width among indicator-bearing lines for alignment
+    let maxIndW = 0;
+    for (const i of sec) {
+      if (output[i].result !== null && indicators[i]) {
+        maxIndW = Math.max(maxIndW, aligned[i].length);
+      }
+    }
+    for (const i of sec) {
+      if (output[i].result !== null) {
+        const hasInd = indicators[i];
+        const ind = indicators[i] === "summed" ? " │" : indicators[i] === "total" ? " ┘" : "";
+        const padded = hasInd ? aligned[i].padEnd(maxIndW) : aligned[i];
+        formatted[i] = lines[i].padEnd(align) + "# => " + padded + ind;
+      } else {
+        formatted[i] = lines[i];
+      }
+    }
   }
-  const maxLen = resultLines.length ? Math.max(...resultLines.map(l => l.length)) : 0;
-  const align = Math.max(maxLen + 2, 40);
-  return lines.map((line, i) => {
-    if (output[i].result !== null) return line.padEnd(align) + "# => " + output[i].result;
-    return line;
-  }).join("\n");
+  return formatted.join("\n");
 }
 
 function downloadFile() {
