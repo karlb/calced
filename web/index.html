@@ -792,9 +792,13 @@ function _tryDateEvalInner(tokens, variables) {
   return null;
 }
 
-function evaluateLine(text, variables, rates) {
+function evaluateLine(text, variables, rates, totalValue) {
   let tokens = tokenize(text);
-  if (tokens.some(t => t[0] === "TOTAL")) return ["TOTAL", variables];
+  if (tokens.some(t => t[0] === "TOTAL")) {
+    if (totalValue == null) return ["TOTAL", variables];
+    // Replace TOTAL tokens with the computed total value
+    tokens = tokens.map(t => t[0] === "TOTAL" ? ["NUM", totalValue, t[2], t[3]] : t);
+  }
   // Try date evaluation first
   const dateResult = _tryDateEval(tokens, variables);
   if (dateResult !== null) return dateResult;
@@ -1119,8 +1123,11 @@ function processText(text) {
     variables = newVars;
     if (result === "TOTAL") {
       const total = resultsAcc.reduce((s, r) => r !== null && !_isDateObj(r) ? s.plus(r) : s, new Big(0));
-      resultsAcc.push(total);
-      output.push({ result: formatResult(total, { ...fmtOpts }), cls, isTotal: true });
+      // Re-evaluate with the total value substituted in
+      const [finalResult, finalVars] = evaluateLine(stripped, variables, rates, total);
+      variables = finalVars;
+      resultsAcc.push(finalResult);
+      output.push({ result: formatResult(finalResult, { ...fmtOpts }), cls, isTotal: true });
       resultsAcc = [];
     } else if (result !== null) {
       resultsAcc.push(result);

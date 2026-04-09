@@ -977,12 +977,23 @@ def _try_date_eval_inner(tokens, variables):
     return None
 
 
-def evaluate_line(text, variables, rates=None):
-    """Evaluate a line. Returns (result, variables) or (None, variables)."""
+def evaluate_line(text, variables, rates=None, total_value=None):
+    """Evaluate a line. Returns (result, variables) or (None, variables).
+
+    When total_value is None and the line contains a total/sum keyword,
+    returns ("TOTAL", variables) so the caller can compute the sum and
+    re-call with total_value set.
+    """
     tokens = tokenize(text)
 
     if any(t[0] == "TOTAL" for t in tokens):
-        return "TOTAL", variables
+        if total_value is None:
+            return "TOTAL", variables
+        # Replace TOTAL tokens with the computed total value
+        tokens = [
+            ("NUM", total_value, t[2], t[3]) if t[0] == "TOTAL" else t
+            for t in tokens
+        ]
 
     # Try date evaluation first
     date_result = _try_date_eval(tokens, variables)
@@ -1131,8 +1142,10 @@ def _process_lines(content):
 
         if result == "TOTAL":
             total = sum(r for r in results_acc if r is not None and not isinstance(r, datetime.date))
-            results_acc.append(total)
-            yield (clean, total, dict(fmt_opts), vars_before, True)
+            # Re-evaluate with the total value substituted in
+            result, variables = evaluate_line(stripped, variables, rates=rates, total_value=Decimal(total))
+            results_acc.append(result)
+            yield (clean, result, dict(fmt_opts), vars_before, True)
             results_acc.clear()
         elif result is not None:
             results_acc.append(result)
