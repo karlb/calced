@@ -24,6 +24,7 @@ deploy-web:
 	trap 'git worktree remove --force "$$TMPDIR" 2>/dev/null; rm -rf "$$TMPDIR"' EXIT; \
 	if git show-ref --verify --quiet refs/remotes/origin/gh-pages; then \
 		git worktree add "$$TMPDIR" gh-pages; \
+		git -C "$$TMPDIR" reset --hard origin/gh-pages; \
 	else \
 		git worktree add --orphan -b gh-pages "$$TMPDIR"; \
 	fi; \

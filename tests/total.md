@@ -16,6 +16,12 @@ total                                   # => 300 ┘
 400                                     # => 400 │
 total                                   # => 400 ┘
 
+# Total in expressions
+100                                     # =>   100 │
+200                                     # =>   200 │
+300                                     # =>   300 │
+total * 2                               # => 1_200 ┘
+
 # Assign total to variable
 10                                      # => 10 │
 20                                      # => 20 │

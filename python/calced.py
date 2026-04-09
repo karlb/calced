@@ -454,36 +454,38 @@ def classify_line(text, variables, rates=None):
             # Reduce parenthesized date sub-expressions for classification
             tokens = _reduce_date_subexprs(tokens, variables or {})
     if has_math and not active:
-        math_start = 0
-        if len(tokens) >= 3 and tokens[0][0] == "WORD" and tokens[1][0] == "EQ":
-            active.add(0)
-            active.add(1)
-            math_start = 2
-
-        # Replace TOTAL tokens with NUM so _build_math/_try_parse can handle them
-        tokens = [
-            ("NUM", Decimal(0), t[2], t[3]) if t[0] == "TOTAL" else t
-            for t in tokens
-        ]
-
-        conversion, conv_start = _detect_conversion(tokens, rates=rates)
-        eof_idx = len(tokens) - 1
-        if conversion is not None:
-            active.update({conv_start, conv_start + 1, conv_start + 2})
-
-        all_vars = {**BUILTIN_CONSTS, **(variables or {})}
-        math_tokens, math_to_orig = _build_math(
-            tokens, math_start, conv_start, eof_idx, all_vars
-        )
-        result, consumed = _try_parse(math_tokens)
-
-        if result is not None:
-            for i in range(consumed):
-                active.add(math_to_orig[i])
+        if (any(t[0] == "TOTAL" for t in tokens if t[0] != "EOF")
+                and not any(t[0] in ("NUM", "PCT", "OP", "FUNC", "WORD", "LPAREN")
+                            for t in tokens if t[0] not in ("EOF",))):
+            for idx, t in enumerate(tokens):
+                if t[0] == "TOTAL":
+                    active.add(idx)
         else:
-            for i, orig_idx in enumerate(math_to_orig):
-                if math_tokens[i][0] in ("NUM", "PCT"):
-                    active.add(orig_idx)
+            math_start = 0
+            if len(tokens) >= 3 and tokens[0][0] == "WORD" and tokens[1][0] == "EQ":
+                active.add(0)
+                active.add(1)
+                math_start = 2
+
+            conversion, conv_start, conv_end = _detect_conversion(tokens, rates=rates)
+            eof_idx = len(tokens) - 1
+            if conversion is not None:
+                active.update(range(conv_start, conv_end))
+
+            all_vars = {**BUILTIN_CONSTS, **(variables or {}),
+                        "total": 0, "sum": 0}
+            math_tokens, math_to_orig = _build_math(
+                tokens, math_start, conv_start, conv_end, eof_idx, all_vars, conversion
+            )
+            result, consumed = _try_parse(math_tokens)
+
+            if result is not None:
+                for i in range(consumed):
+                    active.add(math_to_orig[i])
+            else:
+                for i, orig_idx in enumerate(math_to_orig):
+                    if math_tokens[i][0] in ("NUM", "PCT"):
+                        active.add(orig_idx)
 
     spans = []
     pos = 0
@@ -664,13 +666,47 @@ class Parser:
         raise ParseError(f"Unexpected: {t}")
 
 
+def _cross_rate(fr, to, rates):
+    """Find a cross rate between *fr* and *to* via a shared intermediate currency.
+
+    Returns the effective Decimal multiplier (1 fr = result to), or None.
+    """
+    def _rate_to_mid(currency, mid):
+        """Return the rate that converts 1 *currency* into *mid* units."""
+        if (currency, mid) in rates:
+            return rates[(currency, mid)]
+        if (mid, currency) in rates:
+            return Decimal(1) / rates[(mid, currency)]
+        return None
+
+    # Collect all currencies mentioned in any rate pair
+    mids = set()
+    for a, b in rates:
+        mids.add(a)
+        mids.add(b)
+
+    for mid in mids:
+        if mid == fr or mid == to:
+            continue
+        r_fr = _rate_to_mid(fr, mid)
+        r_to = _rate_to_mid(to, mid)
+        if r_fr is not None and r_to is not None:
+            return r_fr / r_to
+    return None
+
+
 def _detect_conversion(tokens, rates=None):
-    """Detect unit conversion suffix: ... <from_unit> in|to <to_unit> EOF."""
+    """Detect unit conversion: ... <from_unit> in|to <to_unit> ...
+
+    Scans backwards through all token positions.
+    Returns (conversion_info, conv_start, conv_end) where conv_end is exclusive.
+    """
     eof_idx = len(tokens) - 1
-    if eof_idx >= 4:
-        t_fr = tokens[eof_idx - 3]
-        t_kw = tokens[eof_idx - 2]
-        t_to = tokens[eof_idx - 1]
+    # Scan backwards for the pattern: WORD(from) WORD(in/to) WORD(to)
+    for i in range(eof_idx - 3, -1, -1):
+        t_fr = tokens[i]
+        t_kw = tokens[i + 1]
+        t_to = tokens[i + 2]
         if (
             t_to[0] in ("WORD", "FUNC")
             and t_kw[0] == "WORD"
@@ -683,18 +719,22 @@ def _detect_conversion(tokens, rates=None):
                 fr_dim, fr_factor = UNIT_LOOKUP[fr_name]
                 to_dim, to_factor = UNIT_LOOKUP[to_name]
                 if fr_dim == to_dim:
-                    return (fr_dim, fr_factor, to_factor), eof_idx - 3
+                    return (fr_dim, fr_factor, to_factor), i, i + 3
             if rates:
                 pair = (fr_name, to_name)
                 rev = (to_name, fr_name)
                 if pair in rates:
-                    return ("rate", rates[pair], Decimal(1)), eof_idx - 3
+                    return ("rate", rates[pair], Decimal(1)), i, i + 3
                 elif rev in rates:
-                    return ("rate", Decimal(1), rates[rev]), eof_idx - 3
-    return None, eof_idx
+                    return ("rate", Decimal(1), rates[rev]), i, i + 3
+                else:
+                    cross = _cross_rate(fr_name, to_name, rates)
+                    if cross is not None:
+                        return ("rate", cross, Decimal(1)), i, i + 3
+    return None, eof_idx, eof_idx
 
 
-def _build_math(tokens, start, conv_start, eof_idx, all_vars):
+def _build_math(tokens, start, conv_start, conv_end, eof_idx, all_vars, conversion=None):
     """Build math token list, resolving variables and skipping non-math tokens.
 
     Returns (math_tokens, math_to_orig) where math_to_orig[i] is the
@@ -705,12 +745,25 @@ def _build_math(tokens, start, conv_start, eof_idx, all_vars):
     paren_depth = 0
     for idx in range(start, len(tokens)):
         t = tokens[idx]
-        if conv_start <= idx < eof_idx:
+        if conv_start <= idx < conv_end:
+            # Replace the conversion span with inline MULOP(*) NUM(factor)
+            if idx == conv_start and conversion is not None:
+                dim, from_factor, to_factor = conversion
+                if dim != "temperature":
+                    factor = Decimal(str(from_factor)) / Decimal(str(to_factor))
+                    math_tokens.append(("MULOP", "*", t[2], t[3]))
+                    math_to_orig.append(idx)
+                    math_tokens.append(("NUM", factor, t[2], t[3]))
+                    math_to_orig.append(idx)
             continue
         if t[0] == "WORD":
             wl = t[1].lower()
             if wl in all_vars and not isinstance(all_vars[wl], datetime.date):
                 math_tokens.append(("NUM", all_vars[wl], t[2], t[3]))
+                math_to_orig.append(idx)
+        elif t[0] == "TOTAL":
+            if "total" in all_vars:
+                math_tokens.append(("NUM", all_vars["total"], t[2], t[3]))
                 math_to_orig.append(idx)
         elif t[0] in ("EQ", DATE):
             pass
@@ -723,7 +776,8 @@ def _build_math(tokens, start, conv_start, eof_idx, all_vars):
                 paren_depth -= 1
             math_tokens.append(t)
             math_to_orig.append(idx)
-    # Strip empty parentheses left behind when WORDs inside parens are skipped
+    # Strip empty parentheses (and parens containing only commas) left behind
+    # when WORDs inside parens are skipped
     changed = True
     while changed:
         changed = False
@@ -731,15 +785,71 @@ def _build_math(tokens, start, conv_start, eof_idx, all_vars):
         new_orig = []
         i = 0
         while i < len(math_tokens):
-            if (i + 1 < len(math_tokens)
-                    and math_tokens[i][0] == "LPAREN"
-                    and math_tokens[i + 1][0] == "RPAREN"):
-                i += 2
-                changed = True
-            else:
-                new_tokens.append(math_tokens[i])
-                new_orig.append(math_to_orig[i])
-                i += 1
+            if math_tokens[i][0] == "LPAREN":
+                # Find matching RPAREN
+                j = i + 1
+                only_commas = True
+                while j < len(math_tokens) and math_tokens[j][0] != "RPAREN":
+                    if math_tokens[j][0] != "COMMA":
+                        only_commas = False
+                        break
+                    j += 1
+                if only_commas and j < len(math_tokens) and math_tokens[j][0] == "RPAREN":
+                    i = j + 1
+                    changed = True
+                    continue
+            new_tokens.append(math_tokens[i])
+            new_orig.append(math_to_orig[i])
+            i += 1
+        math_tokens = new_tokens
+        math_to_orig = new_orig
+    # Strip orphaned operators left behind when WORDs are removed
+    changed = True
+    while changed:
+        changed = False
+        new_tokens = []
+        new_orig = []
+        for i, t in enumerate(math_tokens):
+            typ = t[0]
+            if typ in ("ADDOP", "MULOP"):
+                # Strip leading operator (except unary minus that was truly first)
+                if not new_tokens:
+                    if typ == "MULOP":
+                        # never valid as unary; keep it so parse fails
+                        new_tokens.append(t)
+                        new_orig.append(math_to_orig[i])
+                        continue
+                    if typ == "ADDOP" and t[1] == "-" and math_to_orig[i] == start:
+                        nxt = math_tokens[i + 1][0] if i + 1 < len(math_tokens) else "EOF"
+                        if nxt in ("NUM", "LPAREN", "FUNC"):
+                            new_tokens.append(t)
+                            new_orig.append(math_to_orig[i])
+                            continue
+                    changed = True
+                    continue
+                prev = new_tokens[-1][0]
+                # Strip operator after another operator (except unary minus)
+                if prev in ("ADDOP", "MULOP"):
+                    if typ == "MULOP":
+                        # keep so parse fails rather than silently exposing trailing numbers
+                        new_tokens.append(t)
+                        new_orig.append(math_to_orig[i])
+                        continue
+                    if typ == "ADDOP" and t[1] == "-":
+                        nxt = math_tokens[i + 1][0] if i + 1 < len(math_tokens) else "EOF"
+                        if nxt in ("NUM", "LPAREN", "FUNC"):
+                            new_tokens.append(t)
+                            new_orig.append(math_to_orig[i])
+                            continue
+                    changed = True
+                    continue
+                # Strip trailing operator (before EOF or RPAREN)
+                nxt = math_tokens[i + 1][0] if i + 1 < len(math_tokens) else "EOF"
+                if nxt in ("EOF", "RPAREN"):
+                    changed = True
+                    continue
+            new_tokens.append(t)
+            new_orig.append(math_to_orig[i])
         math_tokens = new_tokens
         math_to_orig = new_orig
     return math_tokens, math_to_orig
@@ -885,6 +995,7 @@ def _try_date_eval_inner(tokens, variables):
         return _finish(Decimal(diff_days))
 
     # Strip leading label tokens before the first DATE for remaining patterns
+    labels_stripped = False
     first_date_idx = next(
         (i for i, t in enumerate(body) if t[0] == DATE), None
     )
@@ -894,9 +1005,12 @@ def _try_date_eval_inner(tokens, variables):
             for t in body[:first_date_idx]
         ):
             body = body[first_date_idx:]
+            labels_stripped = True
 
     # Pattern 0: bare DATE (e.g., "today", "2025-01-15")
     if len(body) == 1 and body[0][0] == DATE:
+        if labels_stripped:
+            return None
         return _finish(body[0][1])
 
     # Pattern 2: DATE ± expr duration_unit (supports compound: + 1 week + 3 days)
@@ -978,28 +1092,17 @@ def _try_date_eval_inner(tokens, variables):
     return None
 
 
-def evaluate_line(text, variables, rates=None, total_value=None):
-    """Evaluate a line. Returns (result, variables) or (None, variables).
-
-    When total_value is None and the line contains a total/sum keyword,
-    returns ("TOTAL", variables) so the caller can compute the sum and
-    re-call with total_value set.
-    """
+def evaluate_line(text, variables, rates=None, results_acc=None):
+    """Evaluate a line. Returns (result, variables, has_total) or (None, variables, False)."""
     tokens = tokenize(text)
 
-    if any(t[0] == "TOTAL" for t in tokens):
-        if total_value is None:
-            return "TOTAL", variables
-        # Replace TOTAL tokens with the computed total value
-        tokens = [
-            ("NUM", total_value, t[2], t[3]) if t[0] == "TOTAL" else t
-            for t in tokens
-        ]
+    has_total = any(t[0] == "TOTAL" for t in tokens)
 
     # Try date evaluation first
     date_result = _try_date_eval(tokens, variables)
     if date_result is not None:
-        return date_result
+        r, v = date_result
+        return r, v, has_total
 
     # Reduce parenthesized date sub-expressions to numbers
     # e.g. (2025-03-01 - 2025-01-01) days in s → 59 days in s
@@ -1007,13 +1110,19 @@ def evaluate_line(text, variables, rates=None, total_value=None):
 
     all_vars = {**BUILTIN_CONSTS, **variables}
 
+    # Compute subtotal from accumulator and inject as "total"/"sum"
+    if results_acc is not None:
+        subtotal = sum(r for r in results_acc if r is not None and not isinstance(r, datetime.date))
+        all_vars["total"] = subtotal
+        all_vars["sum"] = subtotal
+
     has_value = any(
-        t[0] in ("NUM", "PCT", "FUNC", DATE)
+        t[0] in ("NUM", "PCT", "FUNC", DATE, "TOTAL")
         or (t[0] == "WORD" and t[1].lower() in all_vars)
         for t in tokens
     )
     if not has_value:
-        return None, variables
+        return None, variables, False
 
     pos = 0
     var_name = None
@@ -1021,22 +1130,20 @@ def evaluate_line(text, variables, rates=None, total_value=None):
         var_name = tokens[0][1].lower()
         pos = 2
 
-    conversion, conv_start = _detect_conversion(tokens, rates=rates)
+    conversion, conv_start, conv_end = _detect_conversion(tokens, rates=rates)
     eof_idx = len(tokens) - 1
-    math_tokens, _ = _build_math(tokens, pos, conv_start, eof_idx, all_vars)
+    math_tokens, _ = _build_math(tokens, pos, conv_start, conv_end, eof_idx, all_vars, conversion)
     result, _ = _try_parse(math_tokens)
 
     if result is None:
-        return None, variables
+        return None, variables, False
     if conversion is not None:
         dim, from_factor, to_factor = conversion
         if dim == "temperature":
             result = convert_temperature(result, from_factor, to_factor)
-        else:
-            result = result * from_factor / to_factor
     if var_name:
         variables = {**variables, var_name: result}
-    return result, variables
+    return result, variables, has_total
 
 
 def format_result(n, fmt_opts=None):
@@ -1139,18 +1246,13 @@ def _process_lines(content):
             continue
 
         vars_before = dict(variables)
-        result, variables = evaluate_line(stripped, variables, rates=rates)
+        result, variables, is_total = evaluate_line(stripped, variables, rates=rates, results_acc=results_acc)
 
-        if result == "TOTAL":
-            total = sum(r for r in results_acc if r is not None and not isinstance(r, datetime.date))
-            # Re-evaluate with the total value substituted in
-            result, variables = evaluate_line(stripped, variables, rates=rates, total_value=Decimal(total))
+        if result is not None:
             results_acc.append(result)
-            yield (clean, result, dict(fmt_opts), vars_before, True)
-            results_acc.clear()
-        elif result is not None:
-            results_acc.append(result)
-            yield (clean, result, dict(fmt_opts), vars_before, False)
+            yield (clean, result, dict(fmt_opts), vars_before, is_total)
+            if is_total:
+                results_acc.clear()
         else:
             results_acc.append(None)
             yield (clean, None, None, None, False)

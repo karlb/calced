@@ -110,7 +110,7 @@ def test_tokenize_never_crashes(text):
 def test_additive_identity(a):
     """a + 0 == a"""
     s = decimal_to_str(a)
-    result, _ = evaluate_line(f"{s} + 0", {})
+    result, *_ = evaluate_line(f"{s} + 0", {})
     assert result is not None
     assert result == a
 
@@ -120,7 +120,7 @@ def test_additive_identity(a):
 def test_multiplicative_identity(a):
     """a * 1 == a"""
     s = decimal_to_str(a)
-    result, _ = evaluate_line(f"{s} * 1", {})
+    result, *_ = evaluate_line(f"{s} * 1", {})
     assert result is not None
     assert result == a
 
@@ -130,8 +130,8 @@ def test_multiplicative_identity(a):
 def test_addition_commutativity(a, b):
     """a + b == b + a"""
     sa, sb = decimal_to_str(a), decimal_to_str(b)
-    r1, _ = evaluate_line(f"{sa} + {sb}", {})
-    r2, _ = evaluate_line(f"{sb} + {sa}", {})
+    r1, *_ = evaluate_line(f"{sa} + {sb}", {})
+    r2, *_ = evaluate_line(f"{sb} + {sa}", {})
     assert r1 == r2
 
 
@@ -140,8 +140,8 @@ def test_addition_commutativity(a, b):
 def test_multiplication_commutativity(a, b):
     """a * b == b * a"""
     sa, sb = decimal_to_str(a), decimal_to_str(b)
-    r1, _ = evaluate_line(f"{sa} * {sb}", {})
-    r2, _ = evaluate_line(f"{sb} * {sa}", {})
+    r1, *_ = evaluate_line(f"{sa} * {sb}", {})
+    r2, *_ = evaluate_line(f"{sb} * {sa}", {})
     assert r1 == r2
 
 
@@ -150,7 +150,7 @@ def test_multiplication_commutativity(a, b):
 def test_self_subtraction(a):
     """a - a == 0"""
     s = decimal_to_str(a)
-    result, _ = evaluate_line(f"{s} - {s}", {})
+    result, *_ = evaluate_line(f"{s} - {s}", {})
     assert result is not None
     assert result == 0
 
@@ -160,7 +160,7 @@ def test_self_subtraction(a):
 def test_self_division(a):
     """a / a == 1 (for a != 0)"""
     s = decimal_to_str(a)
-    result, _ = evaluate_line(f"{s} / {s}", {})
+    result, *_ = evaluate_line(f"{s} / {s}", {})
     assert result is not None
     assert result == 1
 
@@ -171,7 +171,7 @@ def test_double_negation(a):
     """-(-a) == a"""
     s = decimal_to_str(a)
     # Wrap in parens to ensure correct parsing: -(-(value))
-    result, _ = evaluate_line(f"-(-({s}))", {})
+    result, *_ = evaluate_line(f"-(-({s}))", {})
     assert result is not None
     assert result == a
 
@@ -210,12 +210,12 @@ def test_unit_conversion_roundtrip(pair, value):
     vs = decimal_to_str(value)
 
     # a → b
-    r1, _ = evaluate_line(f"{vs} {unit_a} to {unit_b}", {})
+    r1, *_ = evaluate_line(f"{vs} {unit_a} to {unit_b}", {})
     assume(r1 is not None)
     rs = decimal_to_str(r1)
 
     # b → a
-    r2, _ = evaluate_line(f"{rs} {unit_b} to {unit_a}", {})
+    r2, *_ = evaluate_line(f"{rs} {unit_b} to {unit_a}", {})
     assume(r2 is not None)
 
     # Allow small relative error from Decimal division
@@ -271,11 +271,11 @@ def test_temperature_roundtrip_evaluate(pair, value):
     ua, ub = _temp_unit_names[a], _temp_unit_names[b]
     vs = decimal_to_str(value)
 
-    r1, _ = evaluate_line(f"{vs} {ua} to {ub}", {})
+    r1, *_ = evaluate_line(f"{vs} {ua} to {ub}", {})
     assume(r1 is not None)
     rs = decimal_to_str(r1)
 
-    r2, _ = evaluate_line(f"{rs} {ub} to {ua}", {})
+    r2, *_ = evaluate_line(f"{rs} {ub} to {ua}", {})
     assume(r2 is not None)
 
     diff = abs(r2 - value)
@@ -293,7 +293,7 @@ def test_temperature_roundtrip_evaluate(pair, value):
 @settings(max_examples=500)
 def test_evaluate_line_never_crashes(text):
     """evaluate_line() should never raise on arbitrary input."""
-    result, variables = evaluate_line(text, {})
+    result, variables, _ = evaluate_line(text, {})
     assert isinstance(variables, dict)
     assert result is None or isinstance(result, (Decimal, str, datetime.date))
 
@@ -326,8 +326,8 @@ def simple_expressions(draw):
 @settings(max_examples=300)
 def test_evaluation_idempotent(expr):
     """Evaluating the same expression twice gives the same result."""
-    r1, _ = evaluate_line(expr, {})
-    r2, _ = evaluate_line(expr, {})
+    r1, *_ = evaluate_line(expr, {})
+    r2, *_ = evaluate_line(expr, {})
     assert r1 == r2
 
 
@@ -385,8 +385,8 @@ _single_arg_funcs = [f for f in BUILTIN_FUNC_NAMES if f not in ("min", "max", "r
 def test_nested_abs_identity(a):
     """abs(abs(a)) == abs(a) for positive a."""
     s = decimal_to_str(a)
-    r1, _ = evaluate_line(f"abs({s})", {})
-    r2, _ = evaluate_line(f"abs(abs({s}))", {})
+    r1, *_ = evaluate_line(f"abs({s})", {})
+    r2, *_ = evaluate_line(f"abs(abs({s}))", {})
     assert r1 is not None
     assert r2 is not None
     assert r1 == r2
@@ -398,8 +398,8 @@ def test_sqrt_squared(a):
     """sqrt(a^2) ≈ abs(a)."""
     assume(a != 0)
     s = decimal_to_str(a)
-    r1, _ = evaluate_line(f"sqrt(({s})^2)", {})
-    r2, _ = evaluate_line(f"abs({s})", {})
+    r1, *_ = evaluate_line(f"sqrt(({s})^2)", {})
+    r2, *_ = evaluate_line(f"abs({s})", {})
     assert r1 is not None
     assert r2 is not None
     diff = abs(r1 - r2)
@@ -417,9 +417,9 @@ _labels = st.sampled_from(["rent", "price", "cost", "total_value", "result"])
 @settings(max_examples=200)
 def test_label_prefix_does_not_change_result(expr, label):
     """Prepending a text label should not change the numeric result."""
-    r_plain, _ = evaluate_line(expr, {})
+    r_plain, *_ = evaluate_line(expr, {})
     assume(r_plain is not None)
-    r_labeled, _ = evaluate_line(f"{label} {expr}", {})
+    r_labeled, *_ = evaluate_line(f"{label} {expr}", {})
     assert r_labeled is not None, (
         f"'{label} {expr}' returned None but '{expr}' returned {r_plain}"
     )
@@ -435,9 +435,9 @@ _paren_labels = st.sampled_from(["(note)", "(monthly)", "(info)", "(cost)"])
 @settings(max_examples=200)
 def test_paren_label_prefix_does_not_change_result(expr, label):
     """Prepending a parenthesized label should not change the numeric result."""
-    r_plain, _ = evaluate_line(expr, {})
+    r_plain, *_ = evaluate_line(expr, {})
     assume(r_plain is not None)
-    r_labeled, _ = evaluate_line(f"{label} {expr}", {})
+    r_labeled, *_ = evaluate_line(f"{label} {expr}", {})
     assert r_labeled is not None, (
         f"'{label} {expr}' returned None but '{expr}' returned {r_plain}"
     )
@@ -457,9 +457,9 @@ _annotations = st.sampled_from(["(note)", "(monthly)", "(see docs)", "(estimated
 @settings(max_examples=200)
 def test_trailing_annotation_does_not_change_result(expr, annotation):
     """Trailing parenthetical annotation should not change the numeric result."""
-    r_plain, _ = evaluate_line(expr, {})
+    r_plain, *_ = evaluate_line(expr, {})
     assume(r_plain is not None)
-    r_annotated, _ = evaluate_line(f"{expr} {annotation}", {})
+    r_annotated, *_ = evaluate_line(f"{expr} {annotation}", {})
     assert r_annotated is not None, (
         f"'{expr} {annotation}' returned None but '{expr}' returned {r_plain}"
     )
@@ -477,7 +477,7 @@ def test_trailing_annotation_does_not_change_result(expr, annotation):
 @settings(max_examples=200)
 def test_classify_evaluate_consistency(expr):
     """If evaluate_line returns a result, classify_line should have active tokens."""
-    result, _ = evaluate_line(expr, {})
+    result, *_ = evaluate_line(expr, {})
     cls = classify_line(expr, {})
     if result is not None:
         assert not isinstance(cls, str), (
@@ -499,7 +499,7 @@ def test_classify_evaluate_consistency(expr):
 def test_percentage_zero_identity(a):
     """a + 0% == a."""
     s = decimal_to_str(a)
-    result, _ = evaluate_line(f"{s} + 0%", {})
+    result, *_ = evaluate_line(f"{s} + 0%", {})
     assert result is not None
     assert result == a, f"{s} + 0% = {result}, expected {a}"
 
@@ -514,9 +514,9 @@ def test_percentage_zero_identity(a):
 def test_variable_roundtrip(a):
     """Assigning a value to a variable and reading it back gives the same value."""
     s = decimal_to_str(a)
-    result, new_vars = evaluate_line(f"x = {s}", {})
+    result, new_vars, _ = evaluate_line(f"x = {s}", {})
     assert result is not None
-    r2, _ = evaluate_line("x + 0", new_vars)
+    r2, *_ = evaluate_line("x + 0", new_vars)
     assert r2 is not None
     assert r2 == result, f"assigned x={result}, but x+0={r2}"
 
@@ -531,8 +531,8 @@ def test_variable_roundtrip(a):
 def test_parenthesized_expression_equivalence(a, b):
     """(a) + (b) == a + b."""
     sa, sb = decimal_to_str(a), decimal_to_str(b)
-    r1, _ = evaluate_line(f"{sa} + {sb}", {})
-    r2, _ = evaluate_line(f"({sa}) + ({sb})", {})
+    r1, *_ = evaluate_line(f"{sa} + {sb}", {})
+    r2, *_ = evaluate_line(f"({sa}) + ({sb})", {})
     assert r1 is not None
     assert r2 is not None
     assert r1 == r2, f"{sa}+{sb}={r1} but ({sa})+({sb})={r2}"

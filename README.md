@@ -292,7 +292,43 @@ total                                   # => 2_005 ┘
 <sub>[Try in web app](https://calced.karl.berlin/0/#K0rNK1EwNDUw4Eovyk9OLcpMLVYwNjXgKi3JzMksAfEMTU25SvJLEnO4AA)</sub>
 <!-- [[[end]]] -->
 
-Blank lines are ignored in the total; headings reset it.
+Blank lines are ignored in the total; headings reset it. Each `total` also resets the running sum, so consecutive totals act as subtotals:
+
+<!-- [[[cog
+run_calced("""
+food 300
+transport 100
+total
+clothing 50
+total
+""")
+]]] -->
+```
+food 300                                # => 300
+transport 100                           # => 100
+total                                   # => 400
+clothing 50                             # => 50
+total                                   # => 50
+```
+<!-- [[[end]]] -->
+
+`total` resolves to a value, so it works inside expressions and assignments:
+
+<!-- [[[cog
+run_calced("""
+100
+200
+300
+total * 2
+""")
+]]] -->
+```
+100                                     # => 100
+200                                     # => 200
+300                                     # => 300
+total * 2                               # => 1_200
+```
+<!-- [[[end]]] -->
 
 ### Number formats
 

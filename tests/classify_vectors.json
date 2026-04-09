@@ -135,5 +135,11 @@
     "text": "gesamt = sum",
     "variables": {},
     "expected": [[0,6,false],[6,7,true],[7,8,false],[8,9,true],[9,12,false]]
+  },
+  {
+    "note": "total not dimmed when used in assignment",
+    "text": "x = total",
+    "variables": {},
+    "expected": [[0,1,false],[1,2,true],[2,3,false],[3,4,true],[4,9,false]]
   }
 ]
