@@ -4,6 +4,7 @@
   {"text": "# comment", "variables": {}, "expected": "comment"},
   {"text": "  # indented comment", "variables": {}, "expected": "comment"},
   {"text": "@format = fixed(2)", "variables": {}, "expected": "directive"},
+  {"text": "@format = eng", "variables": {}, "expected": "directive"},
   {"text": "@separator = comma", "variables": {}, "expected": "directive"},
   {"text": "@rate USD/EUR = 0.92", "variables": {}, "expected": "directive"},
   {

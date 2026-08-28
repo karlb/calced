@@ -5,6 +5,10 @@
 1234.5678                               # => 1.23e+03
 @format = scientific(5)
 1234.5678                               # => 1.2346e+03
+@format = eng
+1234.5678                               # => 1.23k
+@format = eng(5)
+1234.5678                               # => 1.2346k
 @format = auto(4)
 1234.5678                               # =>  1235
 @format = minSig(5)

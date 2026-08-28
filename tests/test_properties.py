@@ -59,7 +59,7 @@ format_decimals = st.decimals(
 # Non-zero decimals for division tests
 nonzero_decimals = sane_decimals.filter(lambda d: d != 0)
 
-fmt_modes = st.sampled_from(["minSig", "fixed", "scientific", "auto"])
+fmt_modes = st.sampled_from(["minSig", "fixed", "scientific", "eng", "auto"])
 fmt_separators = st.sampled_from(["underscore", "comma", "space", "off"])
 fmt_precisions = st.integers(min_value=1, max_value=15)
 

@@ -304,12 +304,13 @@ total
 """)
 ]]] -->
 ```
-food 300                                # => 300
-transport 100                           # => 100
-total                                   # => 400
-clothing 50                             # => 50
-total                                   # => 50
+food 300                                # => 300 │
+transport 100                           # => 100 │
+total                                   # => 400 ┘
+clothing 50                             # =>  50 │
+total                                   # =>  50 ┘
 ```
+<sub>[Try in web app](https://calced.karl.berlin/0/#S8vPT1EwNjDgKilKzCsuyC8qUTAE8fJLEnO4knPySzIy89IVTGEiAA)</sub>
 <!-- [[[end]]] -->
 
 `total` resolves to a value, so it works inside expressions and assignments:
@@ -323,11 +324,12 @@ total * 2
 """)
 ]]] -->
 ```
-100                                     # => 100
-200                                     # => 200
-300                                     # => 300
-total * 2                               # => 1_200
+100                                     # =>   100 │
+200                                     # =>   200 │
+300                                     # =>   300 │
+total * 2                               # => 1_200 ┘
 ```
+<sub>[Try in web app](https://calced.karl.berlin/0/#MzQw4DICYmMgLskvScxR0FIw4gIA)</sub>
 <!-- [[[end]]] -->
 
 ### Number formats
@@ -360,6 +362,8 @@ run_calced("""
 1000000
 @format = scientific
 1000000
+@format = eng
+1000000
 @separator = comma
 @format = minSig(3)
 1000000
@@ -371,9 +375,11 @@ run_calced("""
 1000000                                 # => 1_000_000.00
 @format = scientific
 1000000                                 # => 1.00e+06
+@format = eng
+1000000                                 # => 1M
 @separator = comma
 @format = minSig(3)
 1000000                                 # => 1,000,000
 ```
-<sub>[Try in web app](https://calced.karl.berlin/0/#MzQAAy6HtPyi3MQSBVuFtMyK1BQNI00uQwyp4uTM1LySzLTMZIRkcWpBYlFiSX4RUD45Pzc3EUl9bmZecGa6hjHCLAA)</sub>
+<sub>[Try in web app](https://calced.karl.berlin/0/#MzQAAy6HtPyi3MQSBVuFtMyK1BQNI00uQwyp4uTM1LySzLTMZCySqXnpCNHi1ILEosSS_CKgRHJ-bm4iksLczLzgzHQNY4QNAA)</sub>
 <!-- [[[end]]] -->

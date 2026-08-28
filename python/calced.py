@@ -18,10 +18,10 @@ import zlib
 
 RESULT_RE = re.compile(r"\s+# => .*$")
 DIRECTIVE_RE = re.compile(r"^@(format|separator)\s*=\s*(.+)$", re.IGNORECASE)
-FORMAT_RE = re.compile(r"^(minSig|fixed|scientific|auto)(?:\((\d+)\))?$", re.IGNORECASE)
+FORMAT_RE = re.compile(r"^(minSig|fixed|scientific|eng|auto)(?:\((\d+)\))?$", re.IGNORECASE)
 RATE_RE = re.compile(r"^@rate\s+(\w+)/(\w+)\s*=\s*(.+)$", re.IGNORECASE)
 ALIGNABLE_RE = re.compile(r"^-?[\d_, ]+(\.\d+)?$")
-MODE_MAP = {"minsig": "minSig", "fixed": "fixed", "scientific": "scientific", "auto": "auto"}
+MODE_MAP = {"minsig": "minSig", "fixed": "fixed", "scientific": "scientific", "eng": "eng", "auto": "auto"}
 DEFAULT_FMT_OPTS = {"mode": "minSig", "precision": 10, "separator": "underscore"}
 
 # --- Date/time support ---
@@ -75,6 +75,8 @@ SI_PREFIX = {
     "y": Decimal("1e-24"),  # yocto
 }
 SI_SUFFIX_RE = "[" + re.escape("".join(SI_PREFIX.keys())) + "]"
+# exponent -> prefix for engineering output ("K" and "μ" are input-only aliases)
+ENG_SUFFIX = {round(math.log10(float(v))): k for k, v in SI_PREFIX.items() if k not in ("K", "μ")}
 
 def _float_func(fn):
     """Wrap a math.* function: Decimal -> float -> compute -> Decimal."""
@@ -1185,6 +1187,22 @@ def format_result(n, fmt_opts=None):
     if mode == "scientific":
         # prec = sig figs; Python's e format takes decimal places = sig figs - 1
         return f"{n:.{max(prec - 1, 0)}e}"
+
+    if mode == "eng":
+        if n == 0:
+            return "0"
+        exp = math.floor(math.log10(abs(n)))
+        e3 = math.floor(exp / 3) * 3
+        dec = max(prec - (exp - e3) - 1, 0)
+        mant = round(n / 10**e3, dec)
+        if abs(mant) >= 1000:  # rounding pushed the mantissa up a decade
+            mant, e3 = mant / 1000, e3 + 3
+        if e3 == 0 or e3 in ENG_SUFFIX:
+            s = f"{mant:.{dec}f}"
+            if "." in s:
+                s = s.rstrip("0").rstrip(".")
+            return s + ENG_SUFFIX.get(e3, "")
+        return f"{n:.{max(prec - 1, 0)}e}"  # outside the SI range
 
     if mode == "auto":
         return f"{n:.{prec}g}"

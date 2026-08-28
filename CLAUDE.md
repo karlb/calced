@@ -37,7 +37,7 @@ Both implementations follow the same pipeline: **tokenize → classify line → 
 - `python/calced.py` (~1500 lines): recursive descent parser, `Decimal` arithmetic, CLI with argparse (modes: single-run, watch, show, url, json, dry-run)
 - `web/index.html` (~1400 lines): same engine between `// -- CALCED ENGINE BEGIN --` and `// END CALCED ENGINE` markers, big.js for precision, real-time evaluation, URL compression for sharing
 
-Key concepts: variable assignments (`x = 5`), format/separator directives (`@format fixed 2`), SI prefixes, unit conversions, date arithmetic, percentages, totals.
+Key concepts: variable assignments (`x = 5`), format/separator directives (`@format = fixed(2)`), SI prefixes, unit conversions, date arithmetic, percentages, totals.
 
 ## Test Structure
 

@@ -178,6 +178,7 @@ header div { display: flex; gap: 8px; }
       <div class="cs-head">Formatting <a class="cs-try" onclick="tryExample('fmt')">Try</a></div>
       <div class="cs-ex">1.5k + 500</div>
       <div class="cs-ex">@format = fixed(2)</div>
+      <div class="cs-ex">@format = eng</div>
       <div class="cs-ex">@separator = comma</div>
     </div>
   </div>
@@ -206,6 +207,11 @@ const SI_PREFIX = {
   "G":1e9,"M":1e6,"K":1e3,"k":1e3,"m":1e-3,"u":1e-6,"\u03bc":1e-6,
   "n":1e-9,"p":1e-12,"f":1e-15,"a":1e-18,"z":1e-21,"y":1e-24
 };
+// exponent -> prefix for engineering output ("K" and "\u03bc" are input-only aliases)
+const ENG_SUFFIX = {};
+for (const [k, v] of Object.entries(SI_PREFIX)) {
+  if (k !== "K" && k !== "\u03bc") ENG_SUFFIX[Math.round(Math.log10(v))] = k;
+}
 const SI_SUFFIX_CHARS = Object.keys(SI_PREFIX).join("").replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
 const NUM_RE = new RegExp("^(\\d(?:\\d|_|,(?=\\d))*\\.?\\d*|\\.\\d+)(?:([eE][+-]?\\d+)|([" + SI_SUFFIX_CHARS + "]))?");
 const HEX_BIN_OCT_RE = /^0[xX][0-9a-fA-F]+|^0[bB][01]+|^0[oO][0-7]+/;
@@ -979,6 +985,20 @@ function formatResult(n, fmtOpts) {
     // Pad exponent to 2 digits to match Python's format
     return nf.toExponential(decPlaces).replace(/e([+-])(\d)$/, "e$1" + "0$2");
   }
+  if (mode === "eng") {
+    if (nf === 0) return "0";
+    const exp = Math.floor(Math.log10(Math.abs(nf)));
+    let e3 = Math.floor(exp / 3) * 3;
+    const dec = Math.max(prec - (exp - e3) - 1, 0);
+    let mant = parseFloat((nf / Math.pow(10, e3)).toFixed(dec));
+    if (Math.abs(mant) >= 1000) { mant /= 1000; e3 += 3; }  // rounding pushed the mantissa up a decade
+    if (e3 === 0 || ENG_SUFFIX[e3] !== undefined) {
+      let s = mant.toFixed(dec);
+      if (s.includes(".")) s = s.replace(/0+$/, "").replace(/\.$/, "");
+      return s + (ENG_SUFFIX[e3] || "");
+    }
+    return nf.toExponential(Math.max(prec - 1, 0)).replace(/e([+-])(\d)$/, "e$1" + "0$2");  // outside the SI range
+  }
   if (mode === "auto") {
     return nf.toPrecision(prec);
   }
@@ -986,7 +1006,7 @@ function formatResult(n, fmtOpts) {
 }
 
 const DIRECTIVE_RE = /^@(format|separator)\s*=\s*(.+)$/i;
-const FORMAT_RE = /^(minSig|fixed|scientific|auto)(?:\((\d+)\))?$/i;
+const FORMAT_RE = /^(minSig|fixed|scientific|eng|auto)(?:\((\d+)\))?$/i;
 const RATE_RE = /^@rate\s+(\w+)\/(\w+)\s*=\s*(.+)$/i;
 
 function classifyLine(text, variables, rates) {
@@ -1196,7 +1216,7 @@ function processText(text) {
         const fm = val.match(FORMAT_RE);
         if (fm) {
           const modeRaw = fm[1].toLowerCase();
-          const modeMap = { minsig: "minSig", fixed: "fixed", scientific: "scientific", auto: "auto" };
+          const modeMap = { minsig: "minSig", fixed: "fixed", scientific: "scientific", eng: "eng", auto: "auto" };
           fmtOpts.mode = modeMap[modeRaw] || modeRaw;
           fmtOpts.precision = fm[2] !== undefined ? parseInt(fm[2]) : (modeRaw === "minsig" ? 10 : 3);
         }
@@ -1251,7 +1271,7 @@ const EXAMPLES = {
   pct: "50% of 300\n200 + 15%\n200 - 10%",
   units: "5 km in miles\n100 C in F\n1 gib in mib\n60 min in hr\n1 gal in l",
   funcs: "sqrt(16)\nround(3.14159, 2)\nmin(5, 2, 8)\nmax(1, 9, 3)\nlog10(1000)",
-  fmt: "1000000\n\n@format = fixed(2)\n1000000\n\n@format = scientific\n1000000\n\n@separator = comma\n@format = minSig(3)\n1000000",
+  fmt: "1000000\n\n@format = fixed(2)\n1000000\n\n@format = scientific\n1000000\n\n@format = eng\n1000000\n\n@separator = comma\n@format = minSig(3)\n1000000",
   dates: "today + 2 weeks\nyesterday\ntomorrow\n\n# Deadline\ndeadline = 2026-12-31\ndays until deadline\n\n# Date math\n2025-01-31 + 1 month\n2025-03-01 - 2025-01-01",
   rates: "@rate USD/EUR = 0.92\n100 USD in EUR\n50 EUR in USD\n\n@rate BTC/USD = 97500\n0.5 BTC in USD",
 };
