@@ -56,6 +56,8 @@ monthly 10 + yearly 5                   # =>  15
 distance 100 km in miles                # =>  62.13711922
 fee 200 + 15%                           # => 230
 answer sqrt(16)                         # =>   4
+refund -42.10                           # => -42.1
+item - 5                                # =>   5
 
 # Text with Trailing Annotations
 

@@ -812,16 +812,20 @@ def _build_math(tokens, start, conv_start, conv_end, eof_idx, all_vars, conversi
         for i, t in enumerate(math_tokens):
             typ = t[0]
             if typ in ("ADDOP", "MULOP"):
-                # Strip leading operator (except unary minus that was truly first)
+                # Strip leading operator (except unary minus that was truly first
+                # or is spaced like a sign: "label -5")
                 if not new_tokens:
                     if typ == "MULOP":
                         # never valid as unary; keep it so parse fails
                         new_tokens.append(t)
                         new_orig.append(math_to_orig[i])
                         continue
-                    if typ == "ADDOP" and t[1] == "-" and math_to_orig[i] == start:
-                        nxt = math_tokens[i + 1][0] if i + 1 < len(math_tokens) else "EOF"
-                        if nxt in ("NUM", "LPAREN", "FUNC"):
+                    if typ == "ADDOP" and t[1] == "-":
+                        orig = math_to_orig[i]
+                        nxt_t = math_tokens[i + 1] if i + 1 < len(math_tokens) else ("EOF",)
+                        if nxt_t[0] in ("NUM", "PCT", "LPAREN", "FUNC") and (
+                                orig == start
+                                or tokens[orig - 1][3] < t[2] and nxt_t[2] == t[3]):
                             new_tokens.append(t)
                             new_orig.append(math_to_orig[i])
                             continue
@@ -837,7 +841,7 @@ def _build_math(tokens, start, conv_start, conv_end, eof_idx, all_vars, conversi
                         continue
                     if typ == "ADDOP" and t[1] == "-":
                         nxt = math_tokens[i + 1][0] if i + 1 < len(math_tokens) else "EOF"
-                        if nxt in ("NUM", "LPAREN", "FUNC"):
+                        if nxt in ("NUM", "PCT", "LPAREN", "FUNC"):
                             new_tokens.append(t)
                             new_orig.append(math_to_orig[i])
                             continue
