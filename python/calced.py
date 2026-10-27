@@ -98,10 +98,15 @@ BUILTIN_FUNCS_1 = {
     "atan": _float_func(math.atan),
     "exp": _float_func(math.exp),
 }
+def _round(args):
+    """Round half away from zero, like big.js."""
+    places = int(args[1]) if len(args) > 1 else 0
+    with localcontext(prec=1000):  # quantize fails beyond context precision
+        return args[0].quantize(Decimal(1).scaleb(-places), ROUND_HALF_UP)
+
+
 BUILTIN_FUNCS_N = {
-    "round": lambda args: round(args[0])
-    if len(args) == 1
-    else round(args[0], int(args[1])),
+    "round": _round,
     "min": lambda args: min(args),
     "max": lambda args: max(args),
 }
