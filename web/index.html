@@ -1032,39 +1032,32 @@ function classifyLine(text, variables, rates) {
     }
   }
   if (hasMath && active.size === 0) {
-    if (tokens.some(t => t[0] === "TOTAL")
-        && !tokens.some(t => t[0] !== "EOF" && (t[0] === "NUM" || t[0] === "PCT" || t[0] === "OP" || t[0] === "FUNC" || t[0] === "WORD" || t[0] === "LPAREN"))) {
-      for (let i = 0; i < tokens.length; i++) {
-        if (tokens[i][0] === "TOTAL") active.add(i);
-      }
+    let mathStart = 0;
+    if (tokens.length >= 3 && tokens[0][0] === "WORD" && tokens[1][0] === "EQ") {
+      active.add(0);
+      active.add(1);
+      mathStart = 2;
+    }
+
+    const [conversion, convStart, convEnd] = _detectConversion(tokens, rates);
+    const eofIdx = tokens.length - 1;
+    if (conversion !== null) {
+      for (let ci = convStart; ci < convEnd; ci++) active.add(ci);
+    }
+
+    const allVars = Object.create(null);
+    for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
+    if (variables) { for (const k in variables) allVars[k] = variables[k]; }
+    allVars['total'] = 0; allVars['sum'] = 0;
+    const [mathTokens, mathToOrig] = _buildMath(tokens, mathStart, convStart, convEnd, eofIdx, allVars, conversion);
+    const [result, consumed] = _tryParse(mathTokens);
+
+    if (result !== null) {
+      for (let i = 0; i < consumed; i++) active.add(mathToOrig[i]);
     } else {
-      let mathStart = 0;
-      if (tokens.length >= 3 && tokens[0][0] === "WORD" && tokens[1][0] === "EQ") {
-        active.add(0);
-        active.add(1);
-        mathStart = 2;
-      }
-
-      const [conversion, convStart, convEnd] = _detectConversion(tokens, rates);
-      const eofIdx = tokens.length - 1;
-      if (conversion !== null) {
-        for (let ci = convStart; ci < convEnd; ci++) active.add(ci);
-      }
-
-      const allVars = Object.create(null);
-      for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
-      if (variables) { for (const k in variables) allVars[k] = variables[k]; }
-      allVars['total'] = 0; allVars['sum'] = 0;
-      const [mathTokens, mathToOrig] = _buildMath(tokens, mathStart, convStart, convEnd, eofIdx, allVars, conversion);
-      const [result, consumed] = _tryParse(mathTokens);
-
-      if (result !== null) {
-        for (let i = 0; i < consumed; i++) active.add(mathToOrig[i]);
-      } else {
-        for (let i = 0; i < mathToOrig.length; i++) {
-          if (mathTokens[i][0] === "NUM" || mathTokens[i][0] === "PCT") {
-            active.add(mathToOrig[i]);
-          }
+      for (let i = 0; i < mathToOrig.length; i++) {
+        if (mathTokens[i][0] === "NUM" || mathTokens[i][0] === "PCT") {
+          active.add(mathToOrig[i]);
         }
       }
     }
