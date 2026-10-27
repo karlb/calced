@@ -1,13 +1,19 @@
-.PHONY: README.md deploy-web build-pypi release test-property
+.PHONY: README.md deploy-web build-pypi release test-property test-py39
 README.md:
 	uvx --from cogapp cog -r README.md
 
 test: test-py test-js
 
+PYTHON ?= python3
+
 test-py:
-	python3 -m unittest discover -s tests
-	@for f in tests/*.md; do python/calced.py "$$f"; done
+	$(PYTHON) -m unittest discover -s tests
+	@for f in tests/*.md; do $(PYTHON) python/calced.py "$$f" || exit 1; done
 	git diff --exit-code -- tests/*.md
+
+# Oldest supported Python (see requires-python)
+test-py39:
+	$(MAKE) test-py PYTHON="uv run --no-project --python 3.9 python"
 
 test-property:
 	uv run --with hypothesis --with pytest pytest tests/test_properties.py -v
@@ -44,7 +50,7 @@ build-pypi:
 release-python: build-pypi
 	uv publish python/dist/*
 
-release: test README.md
+release: test test-py39 README.md
 	@set -e; \
 	if [ -n "$$(git status --porcelain)" ]; then \
 		echo "Error: working directory is dirty. Commit changes first."; \
