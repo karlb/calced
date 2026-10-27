@@ -36,6 +36,7 @@ deploy-web:
 	cd "$$TMPDIR" && git add -A && git commit -m "Deploy web app v$$VERSION" && git push origin gh-pages
 
 build-pypi:
+	rm -rf python/dist
 	cp README.md LICENSE python/
 	cd python && uv build
 	rm python/README.md python/LICENSE
