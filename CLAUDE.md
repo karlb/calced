@@ -46,10 +46,21 @@ Key concepts: variable assignments (`x = 5`), format/separator directives (`@for
 - **`tests/test_*.py`** — Python unit tests (unittest framework). `test_cli.py` tests CLI flags via subprocess.
 - **`web/test.mjs`** — JS test runner that extracts the engine from `index.html` and runs against the same vectors and `.md` files.
 
+New or edited `.md` fixtures must be `git add`ed before `make test`, since it checks them with `git diff`.
+
 New tests should use `.md` fixture files or add vectors to the JSON files — these are run against both implementations. Only use Python unittest classes for Python-specific CLI behavior.
 
 ## Cross-Language Consistency
 
 Features must work identically in both Python and JS. When implementing a change, check both implementations and run `make test` to verify both pass. The `.md` integration tests and JSON vectors are shared across both.
+
+Prefer simple rules that always hold over heuristics that work 95% of the time. When input is ambiguous, give no result rather than a guess.
+
+Shared numeric rules:
+- Results outside float range: overflow → no result, underflow → 0
+- Format from the exact Decimal/Big value, never via float
+- Round half away from zero everywhere
+- Inside function calls, commas separate arguments
+- Fractional date amounts → no result
 
 For non-trivial features, consider using separate agents for the Python and JS implementations, then run `make test` to verify both pass.
