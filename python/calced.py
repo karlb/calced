@@ -11,7 +11,7 @@ import json
 import math
 import os
 import re
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, Overflow
 import sys
 import time
 import zlib
@@ -867,6 +867,8 @@ def _try_parse(math_tokens):
     try:
         parser = Parser(math_tokens)
         result = parser.parse_expr()
+        if not math.isfinite(float(result)):
+            raise OverflowError
         if parser.peek()[0] == "EOF":
             return result, parser.pos
         depth = 0
@@ -884,7 +886,7 @@ def _try_parse(math_tokens):
         if ok and depth == 0:
             return result, parser.pos
         return None, -1
-    except (ParseError, ZeroDivisionError, ValueError, OverflowError, InvalidOperation):
+    except (ParseError, ZeroDivisionError, ValueError, OverflowError, InvalidOperation, Overflow):
         return None, -1
 
 

@@ -482,9 +482,9 @@ class Parser {
     let base = this.parseUnary();
     if (this.peek()[0] === "POW") {
       this.consume();
-      const exp = this.parsePower();
-      try { return base.pow(exp.toNumber()); }
-      catch (e) { return new Big(Math.pow(base.toNumber(), exp.toNumber())); }
+      const exp = this.parsePower().toNumber();
+      if (Number.isSafeInteger(exp)) return powInt(base, exp);
+      return new Big(Math.pow(base.toNumber(), exp));
     }
     return base;
   }
@@ -710,10 +710,19 @@ function _buildMath(tokens, start, convStart, convEnd, eofIdx, allVars, conversi
   return [mt, mo];
 }
 
+// Exponentiation by squaring, rounded to 28 significant digits like Python's Decimal
+function powInt(base, n) {
+  let r = new Big(1), b = base.prec(28);
+  for (let k = Math.abs(n); k; k = Math.floor(k / 2), b = b.times(b).prec(28))
+    if (k % 2) r = r.times(b).prec(28);
+  return n < 0 ? new Big(1).div(r) : r;
+}
+
 function _tryParse(mathTokens) {
   try {
     const parser = new Parser(mathTokens);
     const result = parser.parseExpr();
+    if (!isFinite(result.toNumber())) throw new Error("overflow");
     if (parser.peek()[0] === "EOF") return [result, parser.pos];
     let depth = 0, ok = true;
     for (let k = parser.pos; k < mathTokens.length; k++) {
