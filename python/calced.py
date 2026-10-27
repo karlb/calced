@@ -583,10 +583,10 @@ class Parser:
         return left
 
     def parse_term(self):
-        left = self.parse_power()
+        left = self.parse_unary()
         while self.peek()[0] == "MULOP":
             op = self.consume()[1]
-            right = self.parse_power()
+            right = self.parse_unary()
             if op == "*":
                 left *= right
             elif op == "/":
@@ -600,10 +600,10 @@ class Parser:
         return left
 
     def parse_power(self):
-        base = self.parse_unary()
+        base = self.parse_primary()
         if self.peek()[0] == "POW":
             self.consume()
-            exp = self.parse_power()
+            exp = self.parse_unary()
             try:
                 return base**exp
             except InvalidOperation:
@@ -613,9 +613,9 @@ class Parser:
     def parse_unary(self):
         if self.peek()[0] == "ADDOP":
             op = self.consume()[1]
-            val = self.parse_primary()
+            val = self.parse_unary()
             return -val if op == "-" else val
-        return self.parse_primary()
+        return self.parse_power()
 
     def parse_primary(self):
         t = self.peek()

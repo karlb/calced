@@ -468,10 +468,10 @@ class Parser {
     return left;
   }
   parseTerm() {
-    let left = this.parsePower();
+    let left = this.parseUnary();
     while (this.peek()[0] === "MULOP") {
       const op = this.consume()[1];
-      const right = this.parsePower();
+      const right = this.parseUnary();
       if (op === "*") left = left.times(right);
       else if (op === "/") { if (right.eq(0)) throw new Error("division by zero"); left = left.div(right); }
       else if (op === "%") { if (right.eq(0)) throw new Error("division by zero"); left = left.mod(right); }
@@ -479,10 +479,10 @@ class Parser {
     return left;
   }
   parsePower() {
-    let base = this.parseUnary();
+    let base = this.parsePrimary();
     if (this.peek()[0] === "POW") {
       this.consume();
-      const exp = this.parsePower();
+      const exp = this.parseUnary();
       try { return base.pow(exp.toNumber()); }
       catch (e) { return new Big(Math.pow(base.toNumber(), exp.toNumber())); }
     }
@@ -491,10 +491,10 @@ class Parser {
   parseUnary() {
     if (this.peek()[0] === "ADDOP") {
       const op = this.consume()[1];
-      const val = this.parsePrimary();
+      const val = this.parseUnary();
       return op === "-" ? val.neg() : val;
     }
-    return this.parsePrimary();
+    return this.parsePower();
   }
   parsePrimary() {
     const t = this.peek();
