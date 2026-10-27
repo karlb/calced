@@ -16,7 +16,7 @@ import sys
 import time
 import zlib
 
-RESULT_RE = re.compile(r"\s+# => .*$")
+RESULT_RE = re.compile(r"\s+# => .*$|\s+#\s+│$")
 DIRECTIVE_RE = re.compile(r"^@(format|separator)\s*=\s*(.+)$", re.IGNORECASE)
 FORMAT_RE = re.compile(r"^(minSig|fixed|scientific|auto)(?:\((\d+)\))?$", re.IGNORECASE)
 RATE_RE = re.compile(r"^@rate\s+(\w+)/(\w+)\s*=\s*(.+)$", re.IGNORECASE)
@@ -1321,12 +1321,22 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
             if is_total:
                 indicators[i] = "┘"
                 # Mark prior result lines back to previous total or section start
+                first = i
                 for j in range(i - 1, -1, -1):
                     _, r, _, _, jt = section[j]
                     if jt:
                         break  # stop at previous total
                     if r is not None:
                         indicators[j] = "│"
+                        first = j
+                # Continue the bracket across non-result lines
+                for j in range(first, i):
+                    indicators[j] = "│"
+
+        # Bracketed non-result lines must also fit before the result column
+        for (clean, r, _, _, _), ind in zip(section, indicators):
+            if ind and r is None:
+                align = max(align, len(clean) + 2)
 
         # Compute padded fmt_str for each line
         padded_fmts = []
@@ -1362,6 +1372,12 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
                     col.append(
                         colorize_line(clean, result, padded, align, vsnap, rates=rates, indicator=indicator)
                     )
+            elif indicator:
+                pad = " " * (len(" => ") + max_indicator_w)
+                out.append(f"{clean.ljust(align)}#{pad} {indicator}")
+                if use_color:
+                    plain = colorize_line(clean, None, None, align, None, rates=rates)
+                    col.append(f"{plain}{' ' * (align - len(clean))}{DIM}#{pad} {indicator}{RESET}")
             else:
                 out.append(clean)
                 if use_color:

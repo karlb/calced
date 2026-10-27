@@ -97,7 +97,7 @@ for (const file of files) {
       const expStr = m[0].replace(/^\s+# => /, "").replace(INDICATOR_RE, "").trimEnd();
       expected.push({ lineNum: i + 1, expected: expStr });
     } else {
-      inputLines.push(line);
+      inputLines.push(line.replace(/\s+#\s+│$/, ""));
       expected.push(null);
     }
   }

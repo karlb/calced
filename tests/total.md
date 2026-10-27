@@ -57,3 +57,12 @@ subtotal = sum                          # => 60 ┘
 40                                      # => 40 │
 50                                      # => 50 │
 total - subtotal                        # => 30 ┘
+
+# Non-result lines inside a total range
+10                                           # => 10 │
+                                             #       │
+20                                           # => 20 │
+                                             #       │
+A text line long enough to widen the column  #       │
+30                                           # => 30 │
+total                                        # => 60 ┘

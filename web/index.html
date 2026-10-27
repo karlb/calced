@@ -1100,7 +1100,7 @@ function highlightLine(text, cls) {
   return html;
 }
 
-const RESULT_RE = /\s{2,}# => .*$/;
+const RESULT_RE = /\s{2,}# => .*$|\s+#\s+│$/;
 const ALIGNABLE_RE = /^-?[\d_, ]+(\.\d+)?$/;
 
 function splitSections(output, lines) {
@@ -1126,11 +1126,14 @@ function computeTotalIndicators(output, lines) {
     for (const i of sec) {
       if (output[i].isTotal) {
         indicators[i] = "total";
+        let first = i;
         for (let j = sec.indexOf(i) - 1; j >= 0; j--) {
           const k = sec[j];
           if (output[k].isTotal) break;
-          if (output[k].result !== null) indicators[k] = "summed";
+          if (output[k].result !== null) { indicators[k] = "summed"; first = k; }
         }
+        // Continue the bracket across non-result lines
+        for (let k = first; k < i; k++) indicators[k] = "summed";
       }
     }
   }
@@ -1420,7 +1423,7 @@ function formatForFile(text) {
 
   const formatted = new Array(lines.length);
   for (const sec of sections) {
-    const resultIdxs = sec.filter(i => output[i].result !== null);
+    const resultIdxs = sec.filter(i => output[i].result !== null || indicators[i]);
     const maxLen = resultIdxs.length ? Math.max(...resultIdxs.map(i => lines[i].length)) : 0;
     const align = Math.max(maxLen + 2, 40);
     // Compute max result width among indicator-bearing lines for alignment
@@ -1436,6 +1439,8 @@ function formatForFile(text) {
         const ind = indicators[i] === "summed" ? " │" : indicators[i] === "total" ? " ┘" : "";
         const padded = hasInd ? aligned[i].padEnd(maxIndW) : aligned[i];
         formatted[i] = lines[i].padEnd(align) + "# => " + padded + ind;
+      } else if (indicators[i]) {
+        formatted[i] = lines[i].padEnd(align) + "#" + " ".repeat(" => ".length + maxIndW) + " │";
       } else {
         formatted[i] = lines[i];
       }
