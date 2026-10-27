@@ -1208,7 +1208,12 @@ def _process_lines(content):
         if rm:
             fr = rm.group(1).lower()
             to = rm.group(2).lower()
-            rates[(fr, to)] = Decimal(rm.group(3).strip())
+            try:
+                v = Decimal(rm.group(3).strip())
+            except InvalidOperation:
+                v = None
+            if v is not None and v > 0:
+                rates[(fr, to)] = v
             yield (clean, None, None, None, False)
             continue
 

@@ -1180,7 +1180,9 @@ function processText(text) {
       const cls = classifyLine(line, variables, rates);
       const fr = rm[1].toLowerCase();
       const to = rm[2].toLowerCase();
-      rates[fr + "/" + to] = new Big(rm[3].trim());
+      let v = null;
+      try { v = new Big(rm[3].trim()); } catch (e) {}
+      if (v && v.gt(0)) rates[fr + "/" + to] = v;
       output.push({ result: null, cls });
       continue;
     }

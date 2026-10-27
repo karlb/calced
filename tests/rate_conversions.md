@@ -28,3 +28,9 @@ Other non-CELO (converted, approx) 437  # => 437
 earn_USD = 100                          # =>   100
 earn_CELO = 500                         # =>   500
 earn_USD USD in CELO + earn_CELO        # => 1_704.819277
+
+# Invalid rates are ignored, keeping the previous one
+@rate USD/EUR = 0
+@rate USD/EUR = abc
+@rate USD/EUR = -2
+100 USD in EUR                          # => 92
