@@ -3,6 +3,7 @@
 
 import json
 import os
+import pty
 import subprocess
 import sys
 import tempfile
@@ -111,6 +112,24 @@ class TestNoColor(unittest.TestCase):
         os.unlink(tmp)
         self.assertNotIn("\033[", r.stdout)
         self.assertIn("# => 2", r.stdout)
+
+
+class TestColor(unittest.TestCase):
+    def test_color_on_tty(self):
+        tmp = make_tmp("# Header\n@rate EUR/USD = 1.1\n10 EUR in USD\n")
+        master, slave = pty.openpty()
+        env = {k: v for k, v in os.environ.items() if k != "NO_COLOR"}
+        p = subprocess.run(
+            [sys.executable, calced, "--show", tmp],
+            stdout=slave, stderr=subprocess.PIPE, env={**env, "TERM": "xterm"},
+        )
+        os.close(slave)
+        os.unlink(tmp)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        out = os.read(master, 65536).decode()
+        os.close(master)
+        self.assertIn("\033[", out)
+        self.assertIn("11", out)
 
 
 class TestMutualExclusion(unittest.TestCase):
