@@ -207,9 +207,9 @@ const SI_PREFIX = {
   "n":1e-9,"p":1e-12,"f":1e-15,"a":1e-18,"z":1e-21,"y":1e-24
 };
 const SI_SUFFIX_CHARS = Object.keys(SI_PREFIX).join("").replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
-const NUM_RE = new RegExp("^(\\d(?:\\d|_|,(?=\\d))*\\.?\\d*|\\.\\d+)(?:([eE][+-]?\\d+)|([" + SI_SUFFIX_CHARS + "]))?");
+const NUM_RE = new RegExp("^(\\d(?:\\d|_|,(?=\\d))*\\.?\\d*|\\.\\d+)(?:([eE][+-]?\\d+)|([" + SI_SUFFIX_CHARS + "])(?!\\p{L}))?", "u");
 // Inside function arguments, commas always separate arguments
-const NUM_ARG_RE = new RegExp("^(\\d(?:\\d|_)*\\.?\\d*|\\.\\d+)(?:([eE][+-]?\\d+)|([" + SI_SUFFIX_CHARS + "]))?");
+const NUM_ARG_RE = new RegExp("^(\\d(?:\\d|_)*\\.?\\d*|\\.\\d+)(?:([eE][+-]?\\d+)|([" + SI_SUFFIX_CHARS + "])(?!\\p{L}))?", "u");
 const HEX_BIN_OCT_RE = /^0[xX][0-9a-fA-F]+|^0[bB][01]+|^0[oO][0-7]+/;
 
 function _bigWrap(fn) {
@@ -471,10 +471,10 @@ class Parser {
     return left;
   }
   parseTerm() {
-    let left = this.parsePower();
+    let left = this.parseUnary();
     while (this.peek()[0] === "MULOP") {
       const op = this.consume()[1];
-      const right = this.parsePower();
+      const right = this.parseUnary();
       if (op === "*") left = left.times(right);
       else if (op === "/") { if (right.eq(0)) throw new Error("division by zero"); left = left.div(right); }
       else if (op === "%") { if (right.eq(0)) throw new Error("division by zero"); left = left.mod(right); }
@@ -482,10 +482,10 @@ class Parser {
     return left;
   }
   parsePower() {
-    let base = this.parseUnary();
+    let base = this.parsePrimary();
     if (this.peek()[0] === "POW") {
       this.consume();
-      const exp = this.parsePower().toNumber();
+      const exp = this.parseUnary().toNumber();
       if (Number.isSafeInteger(exp)) return powInt(base, exp);
       return new Big(Math.pow(base.toNumber(), exp));
     }
@@ -494,10 +494,10 @@ class Parser {
   parseUnary() {
     if (this.peek()[0] === "ADDOP") {
       const op = this.consume()[1];
-      const val = this.parsePrimary();
+      const val = this.parseUnary();
       return op === "-" ? val.neg() : val;
     }
-    return this.parsePrimary();
+    return this.parsePower();
   }
   parsePrimary() {
     const t = this.peek();
@@ -1044,39 +1044,32 @@ function classifyLine(text, variables, rates) {
     }
   }
   if (hasMath && active.size === 0) {
-    if (tokens.some(t => t[0] === "TOTAL")
-        && !tokens.some(t => t[0] !== "EOF" && (t[0] === "NUM" || t[0] === "PCT" || t[0] === "OP" || t[0] === "FUNC" || t[0] === "WORD" || t[0] === "LPAREN"))) {
-      for (let i = 0; i < tokens.length; i++) {
-        if (tokens[i][0] === "TOTAL") active.add(i);
-      }
+    let mathStart = 0;
+    if (tokens.length >= 3 && tokens[0][0] === "WORD" && tokens[1][0] === "EQ") {
+      active.add(0);
+      active.add(1);
+      mathStart = 2;
+    }
+
+    const [conversion, convStart, convEnd] = _detectConversion(tokens, rates);
+    const eofIdx = tokens.length - 1;
+    if (conversion !== null) {
+      for (let ci = convStart; ci < convEnd; ci++) active.add(ci);
+    }
+
+    const allVars = Object.create(null);
+    for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
+    if (variables) { for (const k in variables) allVars[k] = variables[k]; }
+    allVars['total'] = 0; allVars['sum'] = 0;
+    const [mathTokens, mathToOrig] = _buildMath(tokens, mathStart, convStart, convEnd, eofIdx, allVars, conversion);
+    const [result, consumed] = _tryParse(mathTokens);
+
+    if (result !== null) {
+      for (let i = 0; i < consumed; i++) active.add(mathToOrig[i]);
     } else {
-      let mathStart = 0;
-      if (tokens.length >= 3 && tokens[0][0] === "WORD" && tokens[1][0] === "EQ") {
-        active.add(0);
-        active.add(1);
-        mathStart = 2;
-      }
-
-      const [conversion, convStart, convEnd] = _detectConversion(tokens, rates);
-      const eofIdx = tokens.length - 1;
-      if (conversion !== null) {
-        for (let ci = convStart; ci < convEnd; ci++) active.add(ci);
-      }
-
-      const allVars = Object.create(null);
-      for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
-      if (variables) { for (const k in variables) allVars[k] = variables[k]; }
-      allVars['total'] = 0; allVars['sum'] = 0;
-      const [mathTokens, mathToOrig] = _buildMath(tokens, mathStart, convStart, convEnd, eofIdx, allVars, conversion);
-      const [result, consumed] = _tryParse(mathTokens);
-
-      if (result !== null) {
-        for (let i = 0; i < consumed; i++) active.add(mathToOrig[i]);
-      } else {
-        for (let i = 0; i < mathToOrig.length; i++) {
-          if (mathTokens[i][0] === "NUM" || mathTokens[i][0] === "PCT") {
-            active.add(mathToOrig[i]);
-          }
+      for (let i = 0; i < mathToOrig.length; i++) {
+        if (mathTokens[i][0] === "NUM" || mathTokens[i][0] === "PCT") {
+          active.add(mathToOrig[i]);
         }
       }
     }
@@ -1202,7 +1195,9 @@ function processText(text) {
       const cls = classifyLine(line, variables, rates);
       const fr = rm[1].toLowerCase();
       const to = rm[2].toLowerCase();
-      rates[fr + "/" + to] = new Big(rm[3].trim());
+      let v = null;
+      try { v = new Big(rm[3].trim()); } catch (e) {}
+      if (v && v.gt(0)) rates[fr + "/" + to] = v;
       output.push({ result: null, cls });
       continue;
     }

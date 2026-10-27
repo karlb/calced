@@ -326,7 +326,7 @@ def tokenize(text):
         m = re.match(
             r"(\d(?:\d|_" + comma + r")*\.?\d*|\.\d+)(?:([eE][+-]?\d+)|("
             + SI_SUFFIX_RE
-            + r"))?",
+            + r")(?![^\W\d_]))?",
             text[i:],
         )
         if m and m.group(1):
@@ -465,38 +465,31 @@ def classify_line(text, variables, rates=None):
             # Reduce parenthesized date sub-expressions for classification
             tokens = _reduce_date_subexprs(tokens, variables or {})
     if has_math and not active:
-        if (any(t[0] == "TOTAL" for t in tokens if t[0] != "EOF")
-                and not any(t[0] in ("NUM", "PCT", "OP", "FUNC", "WORD", "LPAREN")
-                            for t in tokens if t[0] not in ("EOF",))):
-            for idx, t in enumerate(tokens):
-                if t[0] == "TOTAL":
-                    active.add(idx)
+        math_start = 0
+        if len(tokens) >= 3 and tokens[0][0] == "WORD" and tokens[1][0] == "EQ":
+            active.add(0)
+            active.add(1)
+            math_start = 2
+
+        conversion, conv_start, conv_end = _detect_conversion(tokens, rates=rates)
+        eof_idx = len(tokens) - 1
+        if conversion is not None:
+            active.update(range(conv_start, conv_end))
+
+        all_vars = {**BUILTIN_CONSTS, **(variables or {}),
+                    "total": 0, "sum": 0}
+        math_tokens, math_to_orig = _build_math(
+            tokens, math_start, conv_start, conv_end, eof_idx, all_vars, conversion
+        )
+        result, consumed = _try_parse(math_tokens)
+
+        if result is not None:
+            for i in range(consumed):
+                active.add(math_to_orig[i])
         else:
-            math_start = 0
-            if len(tokens) >= 3 and tokens[0][0] == "WORD" and tokens[1][0] == "EQ":
-                active.add(0)
-                active.add(1)
-                math_start = 2
-
-            conversion, conv_start, conv_end = _detect_conversion(tokens, rates=rates)
-            eof_idx = len(tokens) - 1
-            if conversion is not None:
-                active.update(range(conv_start, conv_end))
-
-            all_vars = {**BUILTIN_CONSTS, **(variables or {}),
-                        "total": 0, "sum": 0}
-            math_tokens, math_to_orig = _build_math(
-                tokens, math_start, conv_start, conv_end, eof_idx, all_vars, conversion
-            )
-            result, consumed = _try_parse(math_tokens)
-
-            if result is not None:
-                for i in range(consumed):
-                    active.add(math_to_orig[i])
-            else:
-                for i, orig_idx in enumerate(math_to_orig):
-                    if math_tokens[i][0] in ("NUM", "PCT"):
-                        active.add(orig_idx)
+            for i, orig_idx in enumerate(math_to_orig):
+                if math_tokens[i][0] in ("NUM", "PCT"):
+                    active.add(orig_idx)
 
     spans = []
     pos = 0
@@ -601,10 +594,10 @@ class Parser:
         return left
 
     def parse_term(self):
-        left = self.parse_power()
+        left = self.parse_unary()
         while self.peek()[0] == "MULOP":
             op = self.consume()[1]
-            right = self.parse_power()
+            right = self.parse_unary()
             if op == "*":
                 left *= right
             elif op == "/":
@@ -618,10 +611,10 @@ class Parser:
         return left
 
     def parse_power(self):
-        base = self.parse_unary()
+        base = self.parse_primary()
         if self.peek()[0] == "POW":
             self.consume()
-            exp = self.parse_power()
+            exp = self.parse_unary()
             try:
                 return base**exp
             except InvalidOperation:
@@ -631,9 +624,9 @@ class Parser:
     def parse_unary(self):
         if self.peek()[0] == "ADDOP":
             op = self.consume()[1]
-            val = self.parse_primary()
+            val = self.parse_unary()
             return -val if op == "-" else val
-        return self.parse_primary()
+        return self.parse_power()
 
     def parse_primary(self):
         t = self.peek()
@@ -1243,7 +1236,12 @@ def _process_lines(content, rates=None):
         if rm:
             fr = rm.group(1).lower()
             to = rm.group(2).lower()
-            rates[(fr, to)] = Decimal(rm.group(3).strip())
+            try:
+                v = Decimal(rm.group(3).strip())
+            except InvalidOperation:
+                v = None
+            if v is not None and v > 0:
+                rates[(fr, to)] = v
             yield (clean, None, None, None, False)
             continue
 
