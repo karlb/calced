@@ -1585,7 +1585,7 @@ def main():
 
     if args.url:
         content = open(args.file).read()
-        content = re.sub(r"\s+# => .*$", "", content, flags=re.MULTILINE)
+        content = "\n".join(RESULT_RE.sub("", line) for line in content.split("\n"))
         compressed = zlib.compress(content.encode(), wbits=-15)
         encoded = base64.b64encode(compressed).decode()
         encoded = encoded.replace("+", "-").replace("/", "_").rstrip("=")

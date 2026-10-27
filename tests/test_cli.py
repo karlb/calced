@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Test CLI flags by invoking calced.py as a subprocess."""
 
+import base64
 import json
 import os
 import pty
@@ -8,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zlib
 
 here = os.path.dirname(os.path.abspath(__file__))
 calced = os.path.join(here, "..", "python", "calced.py")
@@ -97,6 +99,16 @@ class TestUrl(unittest.TestCase):
         r = run(["--url", os.path.join(here, "basic_arithmetic.md")])
         self.assertEqual(r.returncode, 0)
         self.assertTrue(r.stdout.strip().startswith("https://calced.karl.berlin/"))
+
+    def test_strips_results_and_total_brackets(self):
+        text = "1\n\n2\ntotal\n"
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as f:
+            f.write(text)
+        self.addCleanup(os.unlink, f.name)
+        run([f.name])  # adds results and │ bracket lines
+        encoded = run(["--url", f.name]).stdout.strip().split("#", 1)[1]
+        raw = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+        self.assertEqual(zlib.decompress(raw, -15).decode(), text)
 
 
 class TestStdin(unittest.TestCase):
