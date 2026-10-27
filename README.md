@@ -85,7 +85,7 @@ groceries 200 + 150                     # =>   350 │
 utilities 80 + 45 + 30                  # =>   155 │
 total                                   # => 2_005 ┘
 ```
-<sub>[Try in web app](https://calced.karl.berlin/0/#K0rNK1EwNDUw4Eovyk9OLcpMLVYwMjBQ0AYJcpWWZOZkloDELEBCJqZAwtiAqyS_JDGHCwA)</sub>
+<sub>[Try in web app](https://calced.karl.berlin/1/#K0rNK1EwNDUw4Eovyk9OLcpMLVYwMjBQ0AYJcpWWZOZkloDELEBCJqZAwtiAqyS_JDGHCwA)</sub>
 <!-- [[[end]]] -->
 
 Results are aligned and updated in place each time you run the CLI (or automatically in watch mode), or live as you type in the web app.
@@ -108,7 +108,7 @@ run_calced("""
 2 ^ 10                                  # => 1_024
 17 % 5                                  # =>     2
 ```
-<sub>[Try in web app](https://calced.karl.berlin/0/#M1LQVjDmMjRQ0FLQMAGyzTS5jBTiFAwNuAzNFVQVTLkA)</sub>
+<sub>[Try in web app](https://calced.karl.berlin/1/#M1LQVjDmMjRQ0FLQMAGyzTS5jBTiFAwNuAzNFVQVTLkA)</sub>
 <!-- [[[end]]] -->
 
 ### Variables
@@ -127,7 +127,7 @@ tax_rate = 22%                          # =>     0.22
 tax = income * tax_rate                 # => 1_100
 after_tax = income - tax                # => 3_900
 ```
-<sub>[Try in web app](https://calced.karl.berlin/0/#y8xLzs9NVbBVMDUwMOAqSayIL0osAfGNjFRBXCArE6JESwEmy5WYVpJaFI8iqwuS5QIA)</sub>
+<sub>[Try in web app](https://calced.karl.berlin/1/#y8xLzs9NVbBVMDUwMOAqSayIL0osAfGNjFRBXCArE6JESwEmy5WYVpJaFI8iqwuS5QIA)</sub>
 <!-- [[[end]]] -->
 
 ### Percentages
@@ -146,7 +146,7 @@ run_calced("""
 200 - 10%                               # => 180
 10 as % of 50                           # =>  20
 ```
-<sub>[Try in web app](https://calced.karl.berlin/0/#MzVQVchPUzA2MOAyMjBQ0FYwNFUFs3QVDA1UuQwNFBKLFcBKTA24AA)</sub>
+<sub>[Try in web app](https://calced.karl.berlin/1/#MzVQVchPUzA2MOAyMjBQ0FYwNFUFs3QVDA1UuQwNFBKLFcBKTA24AA)</sub>
 <!-- [[[end]]] -->
 
 ### SI prefixes
@@ -165,7 +165,7 @@ run_calced("""
 1.5G                                    # => 1_500_000_000
 500n * 2                                # =>             0.000001
 ```
-<sub>[Try in web app](https://calced.karl.berlin/0/#M8zmMvTlMtQzdecyNTDIU9BSMOICAA)</sub>
+<sub>[Try in web app](https://calced.karl.berlin/1/#M8zmMvTlMtQzdecyNTDIU9BSMOICAA)</sub>
 <!-- [[[end]]] -->
 
 Supported: `k`/`K` (kilo), `M` (mega), `G` (giga), `T` (tera), `P` (peta), `E` (exa), `m` (milli), `u`/`μ` (micro), `n` (nano), `p` (pico), `f` (femto), and more.
@@ -188,7 +188,7 @@ run_calced("""
 60 min in hr                            # =>     1
 1 gal in l                              # =>     3.78541
 ```
-<sub>[Try in web app](https://calced.karl.berlin/0/#M1XIzlXIzFPIzcxJLeYyNDBQcAZx3bgMFdIzkyAySVxmBkAqD8TLKALJJOaA2DlcAA)</sub>
+<sub>[Try in web app](https://calced.karl.berlin/1/#M1XIzlXIzFPIzcxJLeYyNDBQcAZx3bgMFdIzkyAySVxmBkAqD8TLKALJJOaA2DlcAA)</sub>
 <!-- [[[end]]] -->
 
 Supported dimensions: length, mass, temperature, data, time, volume. Use `in` or `to`.
@@ -209,7 +209,7 @@ run_calced("""
 100 USD in EUR                          # => 92
 50 EUR in USD                           # => 54.34782609
 ```
-<sub>[Try in web app](https://calced.karl.berlin/0/#cyhKLElVCA120XcNDVKwVTDQszTiMjQwAAkpZOYpAEW5TA1AFIgHFOQCAA)</sub>
+<sub>[Try in web app](https://calced.karl.berlin/1/#cyhKLElVCA120XcNDVKwVTDQszTiMjQwAAkpZOYpAEW5TA1AFIgHFOQCAA)</sub>
 <!-- [[[end]]] -->
 
 ### Functions
@@ -232,7 +232,7 @@ max(1, 9, 3)                            # => 9
 log10(1000)                             # => 3
 sin(0)                                  # => 0
 ```
-<sub>[Try in web app](https://calced.karl.berlin/0/#Ky4sKtEwNNPkKsovzUvRMNYzNDE0tdRRMNLkys3M0zAFsnQULICcxAoNQx0FoIyxJldOfrqhgYahgYGBJlcxUBWQAgA)</sub>
+<sub>[Try in web app](https://calced.karl.berlin/1/#Ky4sKtEwNNPkKsovzUvRMNYzNDE0tdRRMNLkys3M0zAFsnQULICcxAoNQx0FoIyxJldOfrqhgYahgYGBJlcxUBWQAgA)</sub>
 <!-- [[[end]]] -->
 
 Available: `sqrt`, `abs`, `floor`, `ceil`, `round`, `log`, `log2`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `exp`, `min`, `max`
@@ -249,7 +249,7 @@ e ^ 1
 pi * 2                                  # => 6.283185307
 e ^ 1                                   # => 2.718281828
 ```
-<sub>[Try in web app](https://calced.karl.berlin/0/#K8hU0FIw4kpViFMw5AIA)</sub>
+<sub>[Try in web app](https://calced.karl.berlin/1/#K8hU0FIw4kpViFMw5AIA)</sub>
 <!-- [[[end]]] -->
 
 ### Date arithmetic
@@ -266,7 +266,7 @@ run_calced("""
 2025-01-31 + 1 month                    # => 2025-02-28
 2025-03-01 - 2025-01-01                 # => 59
 ```
-<sub>[Try in web app](https://calced.karl.berlin/0/#MzIwMtU1MNQ1NFXQVjBWSEmsLOYygooZGwLFDBVy8_NKMqCCxkBxBV0FmAoDQy4A)</sub>
+<sub>[Try in web app](https://calced.karl.berlin/1/#MzIwMtU1MNQ1NFXQVjBWSEmsLOYygooZGwLFDBVy8_NKMqCCxkBxBV0FmAoDQy4A)</sub>
 <!-- [[[end]]] -->
 
 Supports `days`, `weeks`, `months`, `years`. Subtracting two dates returns the difference in days. `today`, `tomorrow`, and `yesterday` work as keywords.
@@ -289,7 +289,7 @@ groceries 350                           # =>   350 │
 utilities 155                           # =>   155 │
 total                                   # => 2_005 ┘
 ```
-<sub>[Try in web app](https://calced.karl.berlin/0/#K0rNK1EwNDUw4Eovyk9OLcpMLVYwNjXgKi3JzMksAfEMTU25SvJLEnO4AA)</sub>
+<sub>[Try in web app](https://calced.karl.berlin/1/#K0rNK1EwNDUw4Eovyk9OLcpMLVYwNjXgKi3JzMksAfEMTU25SvJLEnO4AA)</sub>
 <!-- [[[end]]] -->
 
 Blank lines are ignored in the total; headings reset it. Each `total` also resets the running sum, so consecutive totals act as subtotals:
@@ -304,12 +304,13 @@ total
 """)
 ]]] -->
 ```
-food 300                                # => 300
-transport 100                           # => 100
-total                                   # => 400
-clothing 50                             # => 50
-total                                   # => 50
+food 300                                # => 300 │
+transport 100                           # => 100 │
+total                                   # => 400 ┘
+clothing 50                             # =>  50 │
+total                                   # =>  50 ┘
 ```
+<sub>[Try in web app](https://calced.karl.berlin/1/#S8vPT1EwNjDgKilKzCsuyC8qUTAE8fJLEnO4knPySzIy89IVTGEiAA)</sub>
 <!-- [[[end]]] -->
 
 `total` resolves to a value, so it works inside expressions and assignments:
@@ -323,11 +324,12 @@ total * 2
 """)
 ]]] -->
 ```
-100                                     # => 100
-200                                     # => 200
-300                                     # => 300
-total * 2                               # => 1_200
+100                                     # =>   100 │
+200                                     # =>   200 │
+300                                     # =>   300 │
+total * 2                               # => 1_200 ┘
 ```
+<sub>[Try in web app](https://calced.karl.berlin/1/#MzQw4DICYmMgLskvScxR0FIw4gIA)</sub>
 <!-- [[[end]]] -->
 
 ### Number formats
@@ -346,7 +348,7 @@ celo_price = 0.08 (see http://coinmarketcap.com)
 ```
 celo_price = 0.08 (see http://coinmarketcap.com)  # => 0.08
 ```
-<sub>[Try in web app](https://calced.karl.berlin/0/#S07NyY8vKMpMTlWwVTDQM7BQ0ChOTVXIKCkpsNLXT87PzMtNLMpOLUlOLNBLzs_V5AIA)</sub>
+<sub>[Try in web app](https://calced.karl.berlin/1/#S07NyY8vKMpMTlWwVTDQM7BQ0ChOTVXIKCkpsNLXT87PzMtNLMpOLUlOLNBLzs_V5AIA)</sub>
 <!-- [[[end]]] -->
 
 ### Format directives
@@ -375,5 +377,5 @@ run_calced("""
 @format = minSig(3)
 1000000                                 # => 1,000,000
 ```
-<sub>[Try in web app](https://calced.karl.berlin/0/#MzQAAy6HtPyi3MQSBVuFtMyK1BQNI00uQwyp4uTM1LySzLTMZIRkcWpBYlFiSX4RUD45Pzc3EUl9bmZecGa6hjHCLAA)</sub>
+<sub>[Try in web app](https://calced.karl.berlin/1/#MzQAAy6HtPyi3MQSBVuFtMyK1BQNI00uQwyp4uTM1LySzLTMZIRkcWpBYlFiSX4RUD45Pzc3EUl9bmZecGa6hjHCLAA)</sub>
 <!-- [[[end]]] -->
