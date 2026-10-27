@@ -318,7 +318,7 @@ def tokenize(text):
         m = re.match(
             r"(\d(?:\d|_|,(?=\d))*\.?\d*|\.\d+)(?:([eE][+-]?\d+)|("
             + SI_SUFFIX_RE
-            + r"))?",
+            + r")(?![^\W\d_]))?",
             text[i:],
         )
         if m and m.group(1):
