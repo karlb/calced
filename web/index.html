@@ -208,6 +208,8 @@ const SI_PREFIX = {
 };
 const SI_SUFFIX_CHARS = Object.keys(SI_PREFIX).join("").replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
 const NUM_RE = new RegExp("^(\\d(?:\\d|_|,(?=\\d))*\\.?\\d*|\\.\\d+)(?:([eE][+-]?\\d+)|([" + SI_SUFFIX_CHARS + "]))?");
+// Inside function arguments, commas always separate arguments
+const NUM_ARG_RE = new RegExp("^(\\d(?:\\d|_)*\\.?\\d*|\\.\\d+)(?:([eE][+-]?\\d+)|([" + SI_SUFFIX_CHARS + "]))?");
 const HEX_BIN_OCT_RE = /^0[xX][0-9a-fA-F]+|^0[bB][01]+|^0[oO][0-7]+/;
 
 function _bigWrap(fn) {
@@ -361,6 +363,7 @@ function convertTemperature(value, fromKey, toKey) {
 
 function tokenize(text) {
   const tokens = [];
+  const parens = [];  // per open paren: true if it holds function arguments
   let i = 0;
   const n = text.length;
   while (i < n) {
@@ -391,7 +394,7 @@ function tokenize(text) {
         continue;
       }
     }
-    const m = slice.match(NUM_RE);
+    const m = slice.match(parens.at(-1) ? NUM_ARG_RE : NUM_RE);
     if (m && m[1]) {
       const raw = m[1].replace(/,/g, "").replace(/_/g, "");
       const exp = m[2];
@@ -412,8 +415,8 @@ function tokenize(text) {
     if (text[i] === "*" || text[i] === "/") { tokens.push(["MULOP", text[i], start, i+1]); i++; continue; }
     if (text[i] === "^") { tokens.push(["POW", "^", start, i+1]); i++; continue; }
     if (text[i] === "%") { tokens.push(["MULOP", "%", start, i+1]); i++; continue; }
-    if (text[i] === "(") { tokens.push(["LPAREN", "(", start, i+1]); i++; continue; }
-    if (text[i] === ")") { tokens.push(["RPAREN", ")", start, i+1]); i++; continue; }
+    if (text[i] === "(") { parens.push(tokens.at(-1)?.[0] === "FUNC"); tokens.push(["LPAREN", "(", start, i+1]); i++; continue; }
+    if (text[i] === ")") { parens.pop(); tokens.push(["RPAREN", ")", start, i+1]); i++; continue; }
     if (text[i] === ",") { tokens.push(["COMMA", ",", start, i+1]); i++; continue; }
     if (text[i] === "=") { tokens.push(["EQ", "=", start, i+1]); i++; continue; }
     const wm = slice.match(/^[a-zA-Z_]\w*/);

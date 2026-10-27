@@ -283,6 +283,7 @@ class ParseError(Exception):
 def tokenize(text):
     """Tokenize text into math-relevant tokens, preserving words."""
     tokens = []
+    parens = []  # per open paren: True if it holds function arguments
     i = 0
     n = len(text)
     while i < n:
@@ -315,8 +316,10 @@ def tokenize(text):
                 continue
 
         # Numbers: 1,000 or 1_000 or 1.5 or .5 or 1.5e3 with optional SI suffix
+        # Inside function arguments, commas always separate arguments
+        comma = "" if parens and parens[-1] else r"|,(?=\d)"
         m = re.match(
-            r"(\d(?:\d|_|,(?=\d))*\.?\d*|\.\d+)(?:([eE][+-]?\d+)|("
+            r"(\d(?:\d|_" + comma + r")*\.?\d*|\.\d+)(?:([eE][+-]?\d+)|("
             + SI_SUFFIX_RE
             + r"))?",
             text[i:],
@@ -357,10 +360,13 @@ def tokenize(text):
             i += 1
             continue
         if text[i] == "(":
+            parens.append(bool(tokens) and tokens[-1][0] == "FUNC")
             tokens.append(("LPAREN", "(", start, i + 1))
             i += 1
             continue
         if text[i] == ")":
+            if parens:
+                parens.pop()
             tokens.append(("RPAREN", ")", start, i + 1))
             i += 1
             continue
