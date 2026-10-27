@@ -387,7 +387,7 @@ def tokenize(text):
                 tokens.append(("AS", "as", start, end))
             elif wl in ("total", "sum"):
                 tokens.append(("TOTAL", wl, start, end))
-            elif wl in BUILTIN_FUNC_NAMES:
+            elif wl in BUILTIN_FUNC_NAMES and text[end:].lstrip().startswith("("):
                 tokens.append(("FUNC", wl, start, end))
             else:
                 tokens.append(("WORD", word, start, end))

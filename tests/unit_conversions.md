@@ -44,3 +44,4 @@ dist                                    # => 6.213711922
 # min as function vs min as time unit
 min(5, 3)                               # => 3
 60 min in hr                            # => 1
+5 min                                   # => 5

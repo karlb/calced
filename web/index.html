@@ -425,7 +425,7 @@ function tokenize(text) {
       else if (wl === "of") tokens.push(["OF", "of", start, end]);
       else if (wl === "as") tokens.push(["AS", "as", start, end]);
       else if (wl === "total" || wl === "sum") tokens.push(["TOTAL", wl, start, end]);
-      else if (BUILTIN_FUNC_NAMES.has(wl)) tokens.push(["FUNC", wl, start, end]);
+      else if (BUILTIN_FUNC_NAMES.has(wl) && text.slice(end).trimStart().startsWith("(")) tokens.push(["FUNC", wl, start, end]);
       else tokens.push(["WORD", word, start, end]);
       i = end;
       continue;
