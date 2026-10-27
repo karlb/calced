@@ -1,0 +1,1516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>calced</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%232563eb'/><rect x='11' y='18' width='20' height='5' rx='2.5' fill='white' opacity='.4'/><rect x='11' y='30' width='14' height='5' rx='2.5' fill='white' opacity='.4'/><rect x='11' y='42' width='22' height='5' rx='2.5' fill='white' opacity='.4'/><rect x='39' y='18' width='14' height='5' rx='2.5' fill='white'/><rect x='43' y='30' width='10' height='5' rx='2.5' fill='white'/><rect x='37' y='42' width='16' height='5' rx='2.5' fill='white'/></svg>">
+<meta name="description" content="A notepad calculator that evaluates math expressions in plain text. No install, works offline.">
+<meta property="og:title" content="calced">
+<meta property="og:description" content="A notepad calculator that evaluates math expressions in plain text. No install, works offline.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://calced.karl.berlin/og.png">
+<meta property="og:url" content="https://calced.karl.berlin">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  color-scheme: light dark;
+  --bg: #fff;
+  --surface: #f8f8f8;
+  --border: #ddd;
+  --text: #222;
+  --dim: #767676;
+  --result: #166534;
+  --header-bg: #f0f0f0;
+  --accent: #2563eb;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1e1e2e;
+    --surface: #181825;
+    --border: #313244;
+    --text: #cdd6f4;
+    --dim: #9399b2;
+    --result: #a6e3a1;
+    --header-bg: #11111b;
+    --accent: #89b4fa;
+  }
+}
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: monospace; }
+body { display: flex; flex-direction: column; width: fit-content; min-width: min(720px, 100%); max-width: 100%; margin: 0 auto; }
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 20px; background: var(--header-bg); border-bottom: 1px solid var(--border);
+}
+header h1 { font-size: 1em; font-weight: 600; color: var(--dim); }
+header h1 a { color: inherit; text-decoration: none; }
+header div { display: flex; gap: 8px; }
+.header-link, #share-btn {
+  background: var(--border); color: var(--text); border: none; padding: 6px 14px;
+  border-radius: 4px; cursor: pointer; font: inherit; font-size: 0.85em; text-decoration: none;
+}
+.header-link:hover, #share-btn:hover { background: var(--accent); color: var(--header-bg); }
+#share-btn.copied { background: var(--result); color: var(--header-bg); }
+.editor-wrap {
+  flex: 1; overflow-y: auto;
+}
+.editor-inner {
+  display: flex; min-height: 100%;
+}
+.input-wrap {
+  --pad: 16px;
+  flex: 1 1 0; min-width: 0; min-height: 100%;
+  display: grid; background: var(--surface);
+}
+.input-wrap > * {
+  grid-area: 1/1; padding: 12px var(--pad); font: inherit; line-height: 1.7;
+  white-space: pre-wrap; tab-size: 4; overflow-wrap: break-word; word-break: break-all;
+}
+#highlight { pointer-events: none; color: var(--text); }
+.hl-line { min-height: 1lh; }
+.hl-line.line-hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  margin: 0 calc(-1 * var(--pad)); padding: 0 var(--pad);
+}
+#input {
+  field-sizing: content; color: transparent; caret-color: var(--text);
+  background: transparent; border: none; resize: none;
+  outline: none; overflow: hidden;
+}
+.hl-dim { color: var(--dim); }
+.hl-comment { font-weight: bold; }
+#results {
+  --pad: 16px;
+  width: max-content; min-width: 10%; background: var(--surface);
+  border-left: 1px solid var(--border); padding: 12px var(--pad);
+  overflow: hidden;
+}
+.result-line {
+  line-height: 1.7; text-align: right;
+  color: var(--result); white-space: nowrap; overflow: hidden;
+}
+.result-line.line-hover, .result-line.summed, .result-line.total-line {
+  margin: 0 calc(-1 * var(--pad)); padding: 0 var(--pad);
+}
+.result-line.line-hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.result-line.summed { background: color-mix(in srgb, var(--result) 8%, transparent); }
+.result-line.total-line { border-top: 1px solid var(--dim); }
+#cheatsheet {
+  background: var(--header-bg); border-bottom: 1px solid var(--border);
+  padding: 12px 20px 16px; font-size: 0.85em;
+}
+.cs-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 24px;
+}
+@media (max-width: 600px) {
+  .cs-grid { grid-template-columns: repeat(2, 1fr); }
+}
+.cs-head {
+  display: flex; justify-content: space-between; align-items: center;
+  font-weight: 600; margin-bottom: 2px;
+}
+.cs-try { font-weight: normal; color: var(--accent); cursor: pointer; font-size: 0.9em; }
+.cs-try:hover { text-decoration: underline; }
+.cs-ex { color: var(--dim); line-height: 1.5; }
+.cs-foot {
+  margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border);
+  text-align: right;
+}
+.cs-foot a { color: var(--accent); font-size: 0.85em; text-decoration: none; }
+.cs-foot a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<header>
+  <h1><a href=""><svg width="1.2em" height="1.2em" viewBox="0 0 64 64" style="vertical-align:-0.15em"><rect width="64" height="64" rx="14" fill="#2563eb"/><rect x="11" y="18" width="20" height="5" rx="2.5" fill="white" opacity=".4"/><rect x="11" y="30" width="14" height="5" rx="2.5" fill="white" opacity=".4"/><rect x="11" y="42" width="22" height="5" rx="2.5" fill="white" opacity=".4"/><rect x="39" y="18" width="14" height="5" rx="2.5" fill="white"/><rect x="43" y="30" width="10" height="5" rx="2.5" fill="white"/><rect x="37" y="42" width="16" height="5" rx="2.5" fill="white"/></svg> calced</a></h1>
+  <div>
+    <a class="header-link" href="#new" target="_blank">New</a>
+    <button class="header-link" id="docs-btn" onclick="toggleDocs()">Docs &#x25BE;</button>
+    <button id="share-btn" onclick="shareURL()">Share</button>
+    <button class="header-link" onclick="downloadFile()">Download</button>
+  </div>
+</header>
+<div id="cheatsheet" hidden>
+  <div class="cs-grid">
+    <div>
+      <div class="cs-head">Basics <a class="cs-try" onclick="tryExample('basics')">Try</a></div>
+      <div class="cs-ex">2 + 3</div>
+      <div class="cs-ex">10 * (4 + 6)</div>
+      <div class="cs-ex">2 ^ 10</div>
+    </div>
+    <div>
+      <div class="cs-head">Variables <a class="cs-try" onclick="tryExample('variables')">Try</a></div>
+      <div class="cs-ex">price = 100</div>
+      <div class="cs-ex">qty = 3</div>
+      <div class="cs-ex">total</div>
+    </div>
+    <div>
+      <div class="cs-head">Percentages <a class="cs-try" onclick="tryExample('pct')">Try</a></div>
+      <div class="cs-ex">50% of 300</div>
+      <div class="cs-ex">200 + 15%</div>
+      <div class="cs-ex">200 - 10%</div>
+    </div>
+    <div>
+      <div class="cs-head">Units <a class="cs-try" onclick="tryExample('units')">Try</a></div>
+      <div class="cs-ex">5 km in miles</div>
+      <div class="cs-ex">100 C in F</div>
+      <div class="cs-ex">1 gib in mib</div>
+    </div>
+    <div>
+      <div class="cs-head">Functions <a class="cs-try" onclick="tryExample('funcs')">Try</a></div>
+      <div class="cs-ex">sqrt(16)</div>
+      <div class="cs-ex">round(3.14, 2)</div>
+      <div class="cs-ex">min(5, 2, 8)</div>
+    </div>
+    <div>
+      <div class="cs-head">Rates <a class="cs-try" onclick="tryExample('rates')">Try</a></div>
+      <div class="cs-ex">@rate USD/EUR = 0.92</div>
+      <div class="cs-ex">100 USD in EUR</div>
+      <div class="cs-ex">50 EUR in USD</div>
+    </div>
+    <div>
+      <div class="cs-head">Dates <a class="cs-try" onclick="tryExample('dates')">Try</a></div>
+      <div class="cs-ex">today + 2 weeks</div>
+      <div class="cs-ex">2025-12-25 - today</div>
+      <div class="cs-ex">days until 2025-12-31</div>
+    </div>
+    <div>
+      <div class="cs-head">Formatting <a class="cs-try" onclick="tryExample('fmt')">Try</a></div>
+      <div class="cs-ex">1.5k + 500</div>
+      <div class="cs-ex">@format = fixed(2)</div>
+      <div class="cs-ex">@separator = comma</div>
+    </div>
+  </div>
+  <div class="cs-foot">
+    <a href="https://github.com/karlb/calced#features" target="_blank" rel="noopener">Full docs &#x2192;</a>
+  </div>
+</div>
+<div class="editor-wrap">
+  <div class="editor-inner">
+    <div class="input-wrap">
+      <div id="highlight" aria-hidden="true"></div>
+      <textarea id="input" spellcheck="false"></textarea>
+    </div>
+    <div id="results"></div>
+  </div>
+</div>
+<!-- BEGIN CALCED ENGINE -->
+<script>
+// -- CALCED ENGINE BEGIN --
+/* big.js v6.2.2 | (c) Michael Mclaughlin | https://github.com/MikeMcl/big.js/LICENCE.md */
+!function(r){"use strict";var e,t=1e6,n=1e6,i="[big.js] ",o=i+"Invalid ",s=o+"decimal places",c=o+"rounding mode",f=i+"Division by zero",u={},h=void 0,l=/^-?(\d+(\.\d*)?|\.\d+)(e[+-]?\d+)?$/i;function a(r,e,t,n){var i=r.c;if(t===h&&(t=r.constructor.RM),0!==t&&1!==t&&2!==t&&3!==t)throw Error(c);if(e<1)n=3===t&&(n||!!i[0])||0===e&&(1===t&&i[0]>=5||2===t&&(i[0]>5||5===i[0]&&(n||i[1]!==h))),i.length=1,n?(r.e=r.e-e+1,i[0]=1):i[0]=r.e=0;else if(e<i.length){if(n=1===t&&i[e]>=5||2===t&&(i[e]>5||5===i[e]&&(n||i[e+1]!==h||1&i[e-1]))||3===t&&(n||!!i[0]),i.length=e,n)for(;++i[--e]>9;)if(i[e]=0,0===e){++r.e,i.unshift(1);break}for(e=i.length;!i[--e];)i.pop()}return r}function p(r,e,t){var n=r.e,i=r.c.join(""),o=i.length;if(e)i=i.charAt(0)+(o>1?"."+i.slice(1):"")+(n<0?"e":"e+")+n;else if(n<0){for(;++n;)i="0"+i;i="0."+i}else if(n>0)if(++n>o)for(n-=o;n--;)i+="0";else n<o&&(i=i.slice(0,n)+"."+i.slice(n));else o>1&&(i=i.charAt(0)+"."+i.slice(1));return r.s<0&&t?"-"+i:i}u.abs=function(){var r=new this.constructor(this);return r.s=1,r},u.cmp=function(r){var e,t=this,n=t.c,i=(r=new t.constructor(r)).c,o=t.s,s=r.s,c=t.e,f=r.e;if(!n[0]||!i[0])return n[0]?o:i[0]?-s:0;if(o!=s)return o;if(e=o<0,c!=f)return c>f^e?1:-1;for(s=(c=n.length)<(f=i.length)?c:f,o=-1;++o<s;)if(n[o]!=i[o])return n[o]>i[o]^e?1:-1;return c==f?0:c>f^e?1:-1},u.div=function(r){var e=this,n=e.constructor,i=e.c,o=(r=new n(r)).c,c=e.s==r.s?1:-1,u=n.DP;if(u!==~~u||u<0||u>t)throw Error(s);if(!o[0])throw Error(f);if(!i[0])return r.s=c,r.c=[r.e=0],r;var l,p,w,g,v,d=o.slice(),m=l=o.length,E=i.length,b=i.slice(0,l),P=b.length,D=r,M=D.c=[],x=0,y=u+(D.e=e.e-r.e)+1;for(D.s=c,c=y<0?0:y,d.unshift(0);P++<l;)b.push(0);do{for(w=0;w<10;w++){if(l!=(P=b.length))g=l>P?1:-1;else for(v=-1,g=0;++v<l;)if(o[v]!=b[v]){g=o[v]>b[v]?1:-1;break}if(!(g<0))break;for(p=P==l?o:d;P;){if(b[--P]<p[P]){for(v=P;v&&!b[--v];)b[v]=9;--b[v],b[P]+=10}b[P]-=p[P]}for(;!b[0];)b.shift()}M[x++]=g?w:++w,b[0]&&g?b[P]=i[m]||0:b=[i[m]]}while((m++<E||b[0]!==h)&&c--);return M[0]||1==x||(M.shift(),D.e--,y--),x>y&&a(D,y,n.RM,b[0]!==h),D},u.eq=function(r){return 0===this.cmp(r)},u.gt=function(r){return this.cmp(r)>0},u.gte=function(r){return this.cmp(r)>-1},u.lt=function(r){return this.cmp(r)<0},u.lte=function(r){return this.cmp(r)<1},u.minus=u.sub=function(r){var e,t,n,i,o=this,s=o.constructor,c=o.s,f=(r=new s(r)).s;if(c!=f)return r.s=-f,o.plus(r);var u=o.c.slice(),h=o.e,l=r.c,a=r.e;if(!u[0]||!l[0])return l[0]?r.s=-f:u[0]?r=new s(o):r.s=1,r;if(c=h-a){for((i=c<0)?(c=-c,n=u):(a=h,n=l),n.reverse(),f=c;f--;)n.push(0);n.reverse()}else for(t=((i=u.length<l.length)?u:l).length,c=f=0;f<t;f++)if(u[f]!=l[f]){i=u[f]<l[f];break}if(i&&(n=u,u=l,l=n,r.s=-r.s),(f=(t=l.length)-(e=u.length))>0)for(;f--;)u[e++]=0;for(f=e;t>c;){if(u[--t]<l[t]){for(e=t;e&&!u[--e];)u[e]=9;--u[e],u[t]+=10}u[t]-=l[t]}for(;0===u[--f];)u.pop();for(;0===u[0];)u.shift(),--a;return u[0]||(r.s=1,u=[a=0]),r.c=u,r.e=a,r},u.mod=function(r){var e,t=this,n=t.constructor,i=t.s,o=(r=new n(r)).s;if(!r.c[0])throw Error(f);return t.s=r.s=1,e=1==r.cmp(t),t.s=i,r.s=o,e?new n(t):(i=n.DP,o=n.RM,n.DP=n.RM=0,t=t.div(r),n.DP=i,n.RM=o,this.minus(t.times(r)))},u.neg=function(){var r=new this.constructor(this);return r.s=-r.s,r},u.plus=u.add=function(r){var e,t,n,i=this,o=i.constructor;if(r=new o(r),i.s!=r.s)return r.s=-r.s,i.minus(r);var s=i.e,c=i.c,f=r.e,u=r.c;if(!c[0]||!u[0])return u[0]||(c[0]?r=new o(i):r.s=i.s),r;if(c=c.slice(),e=s-f){for(e>0?(f=s,n=u):(e=-e,n=c),n.reverse();e--;)n.push(0);n.reverse()}for(c.length-u.length<0&&(n=u,u=c,c=n),e=u.length,t=0;e;c[e]%=10)t=(c[--e]=c[e]+u[e]+t)/10|0;for(t&&(c.unshift(t),++f),e=c.length;0===c[--e];)c.pop();return r.c=c,r.e=f,r},u.pow=function(r){var e=this,t=new e.constructor("1"),i=t,s=r<0;if(r!==~~r||r<-1e6||r>n)throw Error(o+"exponent");for(s&&(r=-r);1&r&&(i=i.times(e)),r>>=1;)e=e.times(e);return s?t.div(i):i},u.prec=function(r,e){if(r!==~~r||r<1||r>t)throw Error(o+"precision");return a(new this.constructor(this),r,e)},u.round=function(r,e){if(r===h)r=0;else if(r!==~~r||r<-t||r>t)throw Error(s);return a(new this.constructor(this),r+this.e+1,e)},u.sqrt=function(){var r,e,t,n=this,o=n.constructor,s=n.s,c=n.e,f=new o("0.5");if(!n.c[0])return new o(n);if(s<0)throw Error(i+"No square root");0===(s=Math.sqrt(+p(n,!0,!0)))||s===1/0?((e=n.c.join("")).length+c&1||(e+="0"),c=((c+1)/2|0)-(c<0||1&c),r=new o(((s=Math.sqrt(e))==1/0?"5e":(s=s.toExponential()).slice(0,s.indexOf("e")+1))+c)):r=new o(s+""),c=r.e+(o.DP+=4);do{t=r,r=f.times(t.plus(n.div(t)))}while(t.c.slice(0,c).join("")!==r.c.slice(0,c).join(""));return a(r,(o.DP-=4)+r.e+1,o.RM)},u.times=u.mul=function(r){var e,t=this,n=t.constructor,i=t.c,o=(r=new n(r)).c,s=i.length,c=o.length,f=t.e,u=r.e;if(r.s=t.s==r.s?1:-1,!i[0]||!o[0])return r.c=[r.e=0],r;for(r.e=f+u,s<c&&(e=i,i=o,o=e,u=s,s=c,c=u),e=new Array(u=s+c);u--;)e[u]=0;for(f=c;f--;){for(c=0,u=s+f;u>f;)c=e[u]+o[f]*i[u-f-1]+c,e[u--]=c%10,c=c/10|0;e[u]=c}for(c?++r.e:e.shift(),f=e.length;!e[--f];)e.pop();return r.c=e,r},u.toExponential=function(r,e){var n=this,i=n.c[0];if(r!==h){if(r!==~~r||r<0||r>t)throw Error(s);for(n=a(new n.constructor(n),++r,e);n.c.length<r;)n.c.push(0)}return p(n,!0,!!i)},u.toFixed=function(r,e){var n=this,i=n.c[0];if(r!==h){if(r!==~~r||r<0||r>t)throw Error(s);for(r=r+(n=a(new n.constructor(n),r+n.e+1,e)).e+1;n.c.length<r;)n.c.push(0)}return p(n,!1,!!i)},u.toJSON=u.toString=function(){var r=this,e=r.constructor;return p(r,r.e<=e.NE||r.e>=e.PE,!!r.c[0])},u.toNumber=function(){var r=+p(this,!0,!0);if(!0===this.constructor.strict&&!this.eq(r.toString()))throw Error(i+"Imprecise conversion");return r},u.toPrecision=function(r,e){var n=this,i=n.constructor,s=n.c[0];if(r!==h){if(r!==~~r||r<1||r>t)throw Error(o+"precision");for(n=a(new i(n),r,e);n.c.length<r;)n.c.push(0)}return p(n,r<=n.e||n.e<=i.NE||n.e>=i.PE,!!s)},u.valueOf=function(){var r=this,e=r.constructor;if(!0===e.strict)throw Error(i+"valueOf disallowed");return p(r,r.e<=e.NE||r.e>=e.PE,!0)},e=function r(){function e(t){var n=this;if(!(n instanceof e))return t===h?r():new e(t);if(t instanceof e)n.s=t.s,n.e=t.e,n.c=t.c.slice();else{if("string"!=typeof t){if(!0===e.strict&&"bigint"!=typeof t)throw TypeError(o+"value");t=0===t&&1/t<0?"-0":String(t)}!function(r,e){var t,n,i;if(!l.test(e))throw Error(o+"number");r.s="-"==e.charAt(0)?(e=e.slice(1),-1):1,(t=e.indexOf("."))>-1&&(e=e.replace(".",""));(n=e.search(/e/i))>0?(t<0&&(t=n),t+=+e.slice(n+1),e=e.substring(0,n)):t<0&&(t=e.length);for(i=e.length,n=0;n<i&&"0"==e.charAt(n);)++n;if(n==i)r.c=[r.e=0];else{for(;i>0&&"0"==e.charAt(--i););for(r.e=t-n-1,r.c=[],t=0;n<=i;)r.c[t++]=+e.charAt(n++)}}(n,t)}n.constructor=e}return e.prototype=u,e.DP=20,e.RM=1,e.NE=-7,e.PE=21,e.strict=false,e.roundDown=0,e.roundHalfUp=1,e.roundHalfEven=2,e.roundUp=3,e}(),e.default=e.Big=e,"function"==typeof define&&define.amd?define((function(){return e})):"undefined"!=typeof module&&module.exports?module.exports=e:r.Big=e}(this);
+
+// --- SI Prefixes ---
+const SI_PREFIX = {
+  "Q":1e30,"R":1e27,"Y":1e24,"Z":1e21,"E":1e18,"P":1e15,"T":1e12,
+  "G":1e9,"M":1e6,"K":1e3,"k":1e3,"m":1e-3,"u":1e-6,"\u03bc":1e-6,
+  "n":1e-9,"p":1e-12,"f":1e-15,"a":1e-18,"z":1e-21,"y":1e-24
+};
+const SI_SUFFIX_CHARS = Object.keys(SI_PREFIX).join("").replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+const NUM_RE = new RegExp("^(\\d(?:\\d|_|,(?=\\d))*\\.?\\d*|\\.\\d+)(?:([eE][+-]?\\d+)|([" + SI_SUFFIX_CHARS + "])(?!\\p{L}))?", "u");
+// Inside function arguments, commas always separate arguments
+const NUM_ARG_RE = new RegExp("^(\\d(?:\\d|_)*\\.?\\d*|\\.\\d+)(?:([eE][+-]?\\d+)|([" + SI_SUFFIX_CHARS + "])(?!\\p{L}))?", "u");
+const HEX_BIN_OCT_RE = /^0[xX][0-9a-fA-F]+|^0[bB][01]+|^0[oO][0-7]+/;
+
+function _bigWrap(fn) {
+  return function(x) { return new Big(fn(x.toNumber()).toString()); };
+}
+const BUILTIN_FUNCS_1 = {
+  sqrt: (x) => x.sqrt(),
+  abs: (x) => x.abs(),
+  floor: (x) => new Big(Math.floor(x.toNumber())),
+  ceil: (x) => new Big(Math.ceil(x.toNumber())),
+  log: _bigWrap(Math.log), log2: _bigWrap(Math.log2), log10: _bigWrap(Math.log10),
+  sin: _bigWrap(Math.sin), cos: _bigWrap(Math.cos), tan: _bigWrap(Math.tan),
+  asin: _bigWrap(Math.asin), acos: _bigWrap(Math.acos), atan: _bigWrap(Math.atan),
+  exp: _bigWrap(Math.exp),
+};
+const BUILTIN_FUNCS_N = {
+  round: (args) => args.length === 1 ? args[0].round(0) : args[0].round(args[1].toNumber()),
+  min: (args) => args.reduce((a, b) => a.lt(b) ? a : b),
+  max: (args) => args.reduce((a, b) => a.gt(b) ? a : b),
+};
+const BUILTIN_FUNC_NAMES = new Set([...Object.keys(BUILTIN_FUNCS_1), ...Object.keys(BUILTIN_FUNCS_N)]);
+const BUILTIN_CONSTS = { pi: new Big(Math.PI.toString()), e: new Big(Math.E.toString()), tau: new Big((2 * Math.PI).toString()) };
+
+// --- Date/time support ---
+const ISO_DATE_JS_RE = /^\d{4}-\d{2}-\d{2}/;
+const DATE_KEYWORDS = new Set(["today", "tomorrow", "yesterday"]);
+const DURATION_UNITS = new Set(["day", "days", "week", "weeks", "month", "months", "year", "years"]);
+
+function _makeDate(y, m, d) { return { _isDate: true, y, m, d }; }
+function _dateToISO(dt) {
+  const yy = String(dt.y).padStart(4, '0');
+  const mm = String(dt.m).padStart(2, '0');
+  const dd = String(dt.d).padStart(2, '0');
+  return yy + '-' + mm + '-' + dd;
+}
+function _dateFromISO(s) {
+  const parts = s.split('-');
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  // Validate
+  if (m < 1 || m > 12 || d < 1 || d > _daysInMonth(y, m)) return null;
+  return _makeDate(y, m, d);
+}
+function _isDateObj(v) { return v && v._isDate === true; }
+function _daysInMonth(y, m) {
+  return new Date(y, m, 0).getDate();
+}
+function _todayDate() {
+  const now = new Date();
+  return _makeDate(now.getFullYear(), now.getMonth() + 1, now.getDate());
+}
+function _resolveDateKeyword(kw) {
+  const t = _todayDate();
+  if (kw === "today") return t;
+  if (kw === "tomorrow") return _dateAddDays(t, 1);
+  if (kw === "yesterday") return _dateAddDays(t, -1);
+  return null;
+}
+function _dateToJSDate(dt) { return new Date(dt.y, dt.m - 1, dt.d); }
+function _jsDateToDate(jsd) { return _makeDate(jsd.getFullYear(), jsd.getMonth() + 1, jsd.getDate()); }
+function _dateAddDays(dt, n) {
+  const jsd = _dateToJSDate(dt);
+  jsd.setDate(jsd.getDate() + n);
+  return _jsDateToDate(jsd);
+}
+function _dateAddMonths(dt, months) {
+  let m = dt.m - 1 + months;
+  let y = dt.y + Math.floor(m / 12);
+  m = ((m % 12) + 12) % 12 + 1;
+  const maxDay = _daysInMonth(y, m);
+  return _makeDate(y, m, Math.min(dt.d, maxDay));
+}
+function _dateDiffDays(d1, d2) {
+  const ms = _dateToJSDate(d1).getTime() - _dateToJSDate(d2).getTime();
+  return Math.round(ms / 86400000);
+}
+
+// --- Unit conversion tables ---
+const UNIT_TABLE = {
+  length: {
+    mm:0.001,millimeter:0.001,millimeters:0.001,
+    cm:0.01,centimeter:0.01,centimeters:0.01,
+    m:1,meter:1,meters:1,
+    km:1000,kilometer:1000,kilometers:1000,
+    "in":0.0254,inch:0.0254,inches:0.0254,
+    ft:0.3048,foot:0.3048,feet:0.3048,
+    yd:0.9144,yard:0.9144,yards:0.9144,
+    mi:1609.344,mile:1609.344,miles:1609.344,
+  },
+  mass: {
+    mg:0.001,milligram:0.001,milligrams:0.001,
+    g:1,gram:1,grams:1,
+    kg:1000,kilogram:1000,kilograms:1000,
+    oz:28.3495,ounce:28.3495,ounces:28.3495,
+    lb:453.592,lbs:453.592,pound:453.592,pounds:453.592,
+  },
+  temperature: {
+    c:"c",celsius:"c",
+    f:"f",fahrenheit:"f",
+    k:"k",kelvin:"k",
+  },
+  data: {
+    b:1,byte:1,bytes:1,
+    kb:1000,kilobyte:1000,kilobytes:1000,
+    mb:1e6,megabyte:1e6,megabytes:1e6,
+    gb:1e9,gigabyte:1e9,gigabytes:1e9,
+    tb:1e12,terabyte:1e12,terabytes:1e12,
+    kib:1024,kibibyte:1024,kibibytes:1024,
+    mib:1048576,mebibyte:1048576,mebibytes:1048576,
+    gib:1073741824,gibibyte:1073741824,gibibytes:1073741824,
+    tib:1099511627776,tebibyte:1099511627776,tebibytes:1099511627776,
+  },
+  time: {
+    ms:0.001,millisecond:0.001,milliseconds:0.001,
+    s:1,sec:1,second:1,seconds:1,
+    min:60,minute:60,minutes:60,
+    hr:3600,hour:3600,hours:3600,
+    day:86400,days:86400,
+    week:604800,weeks:604800,
+  },
+  volume: {
+    ml:1,milliliter:1,milliliters:1,
+    l:1000,liter:1000,liters:1000,
+    tsp:4.929,teaspoon:4.929,teaspoons:4.929,
+    tbsp:14.787,tablespoon:14.787,tablespoons:14.787,
+    floz:29.574,cup:236.588,cups:236.588,
+    pt:473.176,pint:473.176,pints:473.176,
+    qt:946.353,quart:946.353,quarts:946.353,
+    gal:3785.41,gallon:3785.41,gallons:3785.41,
+  },
+};
+
+const UNIT_LOOKUP = Object.create(null);
+for (const [dim, units] of Object.entries(UNIT_TABLE)) {
+  for (const [name, factor] of Object.entries(units)) {
+    UNIT_LOOKUP[name] = [dim, factor];
+  }
+}
+
+function convertTemperature(value, fromKey, toKey) {
+  const _273_15 = new Big("273.15");
+  let k;
+  if (fromKey === "c") k = value.plus(_273_15);
+  else if (fromKey === "f") k = value.minus(32).times(5).div(9).plus(_273_15);
+  else k = value;
+  if (toKey === "c") return k.minus(_273_15);
+  if (toKey === "f") return k.minus(_273_15).times(9).div(5).plus(32);
+  return k;
+}
+
+function tokenize(text) {
+  const tokens = [];
+  const parens = [];  // per open paren: true if it holds function arguments
+  let i = 0;
+  const n = text.length;
+  while (i < n) {
+    if (text[i] === ' ' || text[i] === '\t') { i++; continue; }
+    const start = i;
+    const slice = text.substring(i);
+    // ISO date: 2025-01-15
+    if (text[i] >= '0' && text[i] <= '9') {
+      const dm = slice.match(ISO_DATE_JS_RE);
+      if (dm) {
+        const dateObj = _dateFromISO(dm[0]);
+        if (dateObj) {
+          const end = i + dm[0].length;
+          tokens.push(["DATE", dateObj, start, end]);
+          i = end;
+          continue;
+        }
+      }
+    }
+    // Hex/binary/octal
+    if (text[i] === "0" && i + 1 < n && "xXbBoO".includes(text[i + 1])) {
+      const hm = slice.match(HEX_BIN_OCT_RE);
+      if (hm) {
+        const val = new Big(Number(hm[0]));
+        const end = i + hm[0].length;
+        tokens.push(["NUM", val, start, end]);
+        i = end;
+        continue;
+      }
+    }
+    const m = slice.match(parens.at(-1) ? NUM_ARG_RE : NUM_RE);
+    if (m && m[1]) {
+      const raw = m[1].replace(/,/g, "").replace(/_/g, "");
+      const exp = m[2];
+      let val = new Big(exp ? raw + exp : raw);
+      const suffix = m[3];
+      if (suffix) val = val.times(SI_PREFIX[suffix]);
+      const end = i + m[0].length;
+      if (end < n && text[end] === "%") {
+        tokens.push(["PCT", val, start, end + 1]);
+        i = end + 1;
+      } else {
+        tokens.push(["NUM", val, start, end]);
+        i = end;
+      }
+      continue;
+    }
+    if (text[i] === "+" || text[i] === "-") { tokens.push(["ADDOP", text[i], start, i+1]); i++; continue; }
+    if (text[i] === "*" || text[i] === "/") { tokens.push(["MULOP", text[i], start, i+1]); i++; continue; }
+    if (text[i] === "^") { tokens.push(["POW", "^", start, i+1]); i++; continue; }
+    if (text[i] === "%") { tokens.push(["MULOP", "%", start, i+1]); i++; continue; }
+    if (text[i] === "(") { parens.push(tokens.at(-1)?.[0] === "FUNC"); tokens.push(["LPAREN", "(", start, i+1]); i++; continue; }
+    if (text[i] === ")") { parens.pop(); tokens.push(["RPAREN", ")", start, i+1]); i++; continue; }
+    if (text[i] === ",") { tokens.push(["COMMA", ",", start, i+1]); i++; continue; }
+    if (text[i] === "=") { tokens.push(["EQ", "=", start, i+1]); i++; continue; }
+    const wm = slice.match(/^[a-zA-Z_]\w*/);
+    if (wm) {
+      const word = wm[0];
+      const wl = word.toLowerCase();
+      const end = i + wm[0].length;
+      if (DATE_KEYWORDS.has(wl)) tokens.push(["DATE", _resolveDateKeyword(wl), start, end]);
+      else if (wl === "of") tokens.push(["OF", "of", start, end]);
+      else if (wl === "as") tokens.push(["AS", "as", start, end]);
+      else if (wl === "total" || wl === "sum") tokens.push(["TOTAL", wl, start, end]);
+      else if (BUILTIN_FUNC_NAMES.has(wl) && text.slice(end).trimStart().startsWith("(")) tokens.push(["FUNC", wl, start, end]);
+      else tokens.push(["WORD", word, start, end]);
+      i = end;
+      continue;
+    }
+    i++;
+  }
+  tokens.push(["EOF", null, n, n]);
+  return tokens;
+}
+
+class Parser {
+  constructor(tokens) { this.tokens = tokens; this.pos = 0; }
+  peek() { return this.pos < this.tokens.length ? this.tokens[this.pos] : ["EOF", null]; }
+  consume() { return this.tokens[this.pos++]; }
+  parseExpr() {
+    let left = this.parseTerm();
+    while (this.peek()[0] === "ADDOP") {
+      const op = this.consume()[1];
+      if (this.peek()[0] === "PCT") {
+        const pct = this.consume()[1];
+        if (op === "+") left = left.times(new Big(1).plus(pct.div(100)));
+        else left = left.times(new Big(1).minus(pct.div(100)));
+      } else {
+        const right = this.parseTerm();
+        left = op === "+" ? left.plus(right) : left.minus(right);
+      }
+    }
+    // Handle "X as % of Y" → (X / Y) * 100
+    if (this.peek()[0] === "AS"
+        && this.pos + 2 < this.tokens.length
+        && this.tokens[this.pos + 1][0] === "MULOP" && this.tokens[this.pos + 1][1] === "%"
+        && this.tokens[this.pos + 2][0] === "OF") {
+      this.consume(); // AS
+      this.consume(); // %
+      this.consume(); // OF
+      const right = this.parseExpr();
+      if (right.eq(0)) throw new Error("division by zero");
+      left = left.div(right).times(100);
+    }
+    return left;
+  }
+  parseTerm() {
+    let left = this.parseUnary();
+    while (this.peek()[0] === "MULOP") {
+      const op = this.consume()[1];
+      const right = this.parseUnary();
+      if (op === "*") left = left.times(right);
+      else if (op === "/") { if (right.eq(0)) throw new Error("division by zero"); left = left.div(right); }
+      else if (op === "%") { if (right.eq(0)) throw new Error("division by zero"); left = left.mod(right); }
+    }
+    return left;
+  }
+  parsePower() {
+    let base = this.parsePrimary();
+    if (this.peek()[0] === "POW") {
+      this.consume();
+      const exp = this.parseUnary().toNumber();
+      if (Number.isSafeInteger(exp)) return powInt(base, exp);
+      return new Big(Math.pow(base.toNumber(), exp));
+    }
+    return base;
+  }
+  parseUnary() {
+    if (this.peek()[0] === "ADDOP") {
+      const op = this.consume()[1];
+      const val = this.parseUnary();
+      return op === "-" ? val.neg() : val;
+    }
+    return this.parsePower();
+  }
+  parsePrimary() {
+    const t = this.peek();
+    if (t[0] === "NUM") { this.consume(); return t[1]; }
+    if (t[0] === "PCT") {
+      this.consume();
+      const pct = t[1];
+      if (this.peek()[0] === "OF") { this.consume(); const base = this.parseExpr(); return pct.div(100).times(base); }
+      return pct.div(100);
+    }
+    if (t[0] === "FUNC") {
+      const name = this.consume()[1];
+      if (this.peek()[0] !== "LPAREN") throw new Error("Expected ( after " + name);
+      this.consume();
+      const args = [this.parseExpr()];
+      while (this.peek()[0] === "COMMA") { this.consume(); args.push(this.parseExpr()); }
+      if (this.peek()[0] !== "RPAREN") throw new Error("Missing )");
+      this.consume();
+      if (name in BUILTIN_FUNCS_1) {
+        if (args.length !== 1) throw new Error(name + " takes 1 argument");
+        return BUILTIN_FUNCS_1[name](args[0]);
+      }
+      if (name in BUILTIN_FUNCS_N) return BUILTIN_FUNCS_N[name](args);
+      throw new Error("Unknown function: " + name);
+    }
+    if (t[0] === "LPAREN") {
+      this.consume();
+      const val = this.parseExpr();
+      if (this.peek()[0] !== "RPAREN") throw new Error("Missing )");
+      this.consume();
+      return val;
+    }
+    throw new Error("Unexpected: " + t[0]);
+  }
+}
+
+function _crossRate(fr, to, rates) {
+  function rateToMid(currency, mid) {
+    const pair = currency + "/" + mid;
+    if (pair in rates) return rates[pair];
+    const rev = mid + "/" + currency;
+    if (rev in rates) return new Big(1).div(rates[rev]);
+    return null;
+  }
+  const mids = new Set();
+  for (const key of Object.keys(rates)) {
+    const [a, b] = key.split("/");
+    mids.add(a);
+    mids.add(b);
+  }
+  for (const mid of mids) {
+    if (mid === fr || mid === to) continue;
+    const rFr = rateToMid(fr, mid);
+    const rTo = rateToMid(to, mid);
+    if (rFr !== null && rTo !== null) return rFr.div(rTo);
+  }
+  return null;
+}
+
+function _detectConversion(tokens, rates) {
+  const eofIdx = tokens.length - 1;
+  // Scan backwards for WORD(from) WORD(in/to) WORD(to) pattern
+  for (let i = eofIdx - 3; i >= 0; i--) {
+    const tFr = tokens[i];
+    const tKw = tokens[i + 1];
+    const tTo = tokens[i + 2];
+    if ((tTo[0] === "WORD" || tTo[0] === "FUNC")
+        && tKw[0] === "WORD" && (tKw[1].toLowerCase() === "in" || tKw[1].toLowerCase() === "to")
+        && (tFr[0] === "WORD" || tFr[0] === "FUNC")) {
+      const frName = tFr[1].toLowerCase();
+      const toName = tTo[1].toLowerCase();
+      if (frName in UNIT_LOOKUP && toName in UNIT_LOOKUP) {
+        const [frDim, frFactor] = UNIT_LOOKUP[frName];
+        const [toDim, toFactor] = UNIT_LOOKUP[toName];
+        if (frDim === toDim) return [[frDim, frFactor, toFactor], i, i + 3];
+      }
+      if (rates) {
+        const pair = frName + "/" + toName;
+        const rev = toName + "/" + frName;
+        if (pair in rates) return [["rate", rates[pair], new Big(1)], i, i + 3];
+        if (rev in rates) return [["rate", new Big(1), rates[rev]], i, i + 3];
+        const cross = _crossRate(frName, toName, rates);
+        if (cross !== null) return [["rate", cross, new Big(1)], i, i + 3];
+      }
+    }
+  }
+  return [null, eofIdx, eofIdx];
+}
+
+function _buildMath(tokens, start, convStart, convEnd, eofIdx, allVars, conversion) {
+  const mathTokens = [];
+  const mathToOrig = [];
+  let parenDepth = 0;
+  for (let idx = start; idx < tokens.length; idx++) {
+    const t = tokens[idx];
+    if (idx >= convStart && idx < convEnd) {
+      // Replace the conversion span with inline MULOP(*) NUM(factor)
+      if (idx === convStart && conversion) {
+        const [dim, fromFactor, toFactor] = conversion;
+        if (dim !== "temperature") {
+          const ff = fromFactor instanceof Big ? fromFactor : new Big(fromFactor);
+          const tf = toFactor instanceof Big ? toFactor : new Big(toFactor);
+          const factor = ff.div(tf);
+          mathTokens.push(["MULOP", "*", t[2], t[3]]);
+          mathToOrig.push(idx);
+          mathTokens.push(["NUM", factor, t[2], t[3]]);
+          mathToOrig.push(idx);
+        }
+      }
+      continue;
+    }
+    if (t[0] === "WORD") {
+      const wl = t[1].toLowerCase();
+      if (wl in allVars) {
+        const v = allVars[wl];
+        if (!_isDateObj(v)) {
+          mathTokens.push(["NUM", v instanceof Big ? v : new Big(v), t[2], t[3]]);
+          mathToOrig.push(idx);
+        }
+      }
+    } else if (t[0] === "TOTAL") {
+      if ("total" in allVars) {
+        const v = allVars["total"];
+        mathTokens.push(["NUM", v instanceof Big ? v : new Big(v), t[2], t[3]]);
+        mathToOrig.push(idx);
+      }
+    } else if (t[0] === "EQ" || t[0] === "DATE") {
+      // skip
+    } else if (t[0] === "COMMA" && parenDepth === 0) {
+      // skip
+    } else {
+      if (t[0] === "LPAREN") parenDepth++;
+      else if (t[0] === "RPAREN") parenDepth--;
+      mathTokens.push(t);
+      mathToOrig.push(idx);
+    }
+  }
+  // Strip empty parentheses (and parens containing only commas) left behind
+  let mt = mathTokens, mo = mathToOrig, changed = true;
+  while (changed) {
+    changed = false;
+    const nt = [], no = [];
+    let i = 0;
+    while (i < mt.length) {
+      if (mt[i][0] === "LPAREN") {
+        let j = i + 1, onlyCommas = true;
+        while (j < mt.length && mt[j][0] !== "RPAREN") {
+          if (mt[j][0] !== "COMMA") { onlyCommas = false; break; }
+          j++;
+        }
+        if (onlyCommas && j < mt.length && mt[j][0] === "RPAREN") {
+          i = j + 1;
+          changed = true;
+          continue;
+        }
+      }
+      nt.push(mt[i]);
+      no.push(mo[i]);
+      i++;
+    }
+    mt = nt;
+    mo = no;
+  }
+  // Strip orphaned operators left behind when WORDs are removed
+  changed = true;
+  while (changed) {
+    changed = false;
+    const nt = [], no = [];
+    for (let i = 0; i < mt.length; i++) {
+      const typ = mt[i][0];
+      if (typ === "ADDOP" || typ === "MULOP") {
+        // Strip leading operator (except unary minus that was truly first
+        // or is spaced like a sign: "label -5")
+        if (nt.length === 0) {
+          if (typ === "MULOP") {
+            // never valid as unary; keep it so parse fails
+            nt.push(mt[i]); no.push(mo[i]); continue;
+          }
+          if (typ === "ADDOP" && mt[i][1] === "-") {
+            const nxtT = i + 1 < mt.length ? mt[i + 1] : ["EOF"];
+            const nxt = nxtT[0];
+            if ((nxt === "NUM" || nxt === "PCT" || nxt === "LPAREN" || nxt === "FUNC") &&
+                (mo[i] === start ||
+                 (tokens[mo[i] - 1][3] < mt[i][2] && nxtT[2] === mt[i][3]))) {
+              nt.push(mt[i]); no.push(mo[i]); continue;
+            }
+          }
+          changed = true; continue;
+        }
+        const prev = nt[nt.length - 1][0];
+        // Strip operator after another operator (except unary minus)
+        if (prev === "ADDOP" || prev === "MULOP") {
+          if (typ === "MULOP") {
+            // keep so parse fails rather than silently exposing trailing numbers
+            nt.push(mt[i]); no.push(mo[i]); continue;
+          }
+          if (typ === "ADDOP" && mt[i][1] === "-") {
+            const nxt = i + 1 < mt.length ? mt[i + 1][0] : "EOF";
+            if (nxt === "NUM" || nxt === "PCT" || nxt === "LPAREN" || nxt === "FUNC") {
+              nt.push(mt[i]); no.push(mo[i]); continue;
+            }
+          }
+          changed = true; continue;
+        }
+        // Strip trailing operator (before EOF or RPAREN)
+        const nxt = i + 1 < mt.length ? mt[i + 1][0] : "EOF";
+        if (nxt === "EOF" || nxt === "RPAREN") { changed = true; continue; }
+      }
+      nt.push(mt[i]); no.push(mo[i]);
+    }
+    mt = nt; mo = no;
+  }
+  return [mt, mo];
+}
+
+// Exponentiation by squaring, rounded to 28 significant digits like Python's Decimal
+function powInt(base, n) {
+  let r = new Big(1), b = base.prec(28);
+  for (let k = Math.abs(n); k; k = Math.floor(k / 2), b = b.times(b).prec(28))
+    if (k % 2) r = r.times(b).prec(28);
+  return n < 0 ? new Big(1).div(r) : r;
+}
+
+function _tryParse(mathTokens) {
+  try {
+    const parser = new Parser(mathTokens);
+    let result = parser.parseExpr();
+    // Keep results within float range, like Python
+    if (!isFinite(result.toNumber())) throw new Error("overflow");
+    if (result.toNumber() === 0) result = new Big(0);
+    if (parser.peek()[0] === "EOF") return [result, parser.pos];
+    let depth = 0, ok = true;
+    for (let k = parser.pos; k < mathTokens.length; k++) {
+      const tt = mathTokens[k][0];
+      if (tt === "EOF") break;
+      if (depth === 0 && tt !== "LPAREN") { ok = false; break; }
+      if (tt === "LPAREN") depth++;
+      else if (tt === "RPAREN") depth--;
+    }
+    if (ok && depth === 0) return [result, parser.pos];
+    return [null, -1];
+  } catch (e) {
+    return [null, -1];
+  }
+}
+
+function _reduceDateSubexprs(tokens, variables) {
+  let result = tokens.slice();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let i = 0; i < result.length; i++) {
+      if (result[i][0] !== "LPAREN") continue;
+      let depth = 1, j = i + 1;
+      while (j < result.length && depth > 0) {
+        if (result[j][0] === "LPAREN") depth++;
+        else if (result[j][0] === "RPAREN") depth--;
+        j++;
+      }
+      const sub = result.slice(i + 1, j - 1);
+      if (!sub.some(t => t[0] === "DATE")) continue;
+      const subEof = sub.concat([["EOF", null, 0, 0]]);
+      const dateResult = _tryDateEval(subEof, variables);
+      if (dateResult !== null) {
+        const [val] = dateResult;
+        if (val instanceof Big) {
+          result.splice(i, j - i, ["NUM", val, result[i][2], result[j - 1][3]]);
+          changed = true;
+          break;
+        }
+      }
+    }
+  }
+  return result;
+}
+
+function _tryDateEval(tokens, variables) {
+  try { return _tryDateEvalInner(tokens, variables); }
+  catch (e) { return null; }
+}
+
+function _tryDateEvalInner(tokens, variables) {
+  // Resolve date-holding variables
+  const resolved = tokens.map(t => {
+    if (t[0] === "WORD") {
+      const wl = t[1].toLowerCase();
+      const val = variables[wl];
+      if (_isDateObj(val)) return ["DATE", val, t[2], t[3]];
+    }
+    return t;
+  });
+  if (!resolved.some(t => t[0] === "DATE")) return null;
+
+  // Strip assignment prefix
+  let varName = null;
+  let toks = resolved;
+  if (toks.length >= 3 && toks[0][0] === "WORD" && toks[1][0] === "EQ") {
+    varName = toks[0][1].toLowerCase();
+    toks = toks.slice(2);
+  }
+  let body = toks.filter(t => t[0] !== "EOF");
+  if (!body.length) return null;
+
+  // Strip outer parentheses
+  while (body.length >= 2 && body[0][0] === "LPAREN" && body[body.length - 1][0] === "RPAREN") {
+    body = body.slice(1, -1);
+  }
+  if (!body.length) return null;
+
+  function _finish(result) {
+    if (varName) {
+      const newVars = Object.create(null);
+      for (const k in variables) newVars[k] = variables[k];
+      newVars[varName] = result;
+      return [result, newVars];
+    }
+    return [result, variables];
+  }
+
+  // Pattern 1: "days/weeks until/since DATE" (checked before label stripping)
+  if (body.length === 3
+      && body[0][0] === "WORD" && (body[0][1].toLowerCase() === "days" || body[0][1].toLowerCase() === "weeks")
+      && body[1][0] === "WORD" && (body[1][1].toLowerCase() === "until" || body[1][1].toLowerCase() === "since")
+      && body[2][0] === "DATE") {
+    const today = _todayDate();
+    const target = body[2][1];
+    const dir = body[1][1].toLowerCase();
+    const diffDays = dir === "until" ? _dateDiffDays(target, today) : _dateDiffDays(today, target);
+    if (body[0][1].toLowerCase() === "weeks") return _finish(new Big(diffDays).div(7));
+    return _finish(new Big(diffDays));
+  }
+
+  // Strip leading label tokens before the first DATE for remaining patterns
+  const LABEL_TYPES = new Set(["WORD", "LPAREN", "RPAREN", "COMMA"]);
+  let firstDateIdx = -1;
+  let labelsStripped = false;
+  for (let i = 0; i < body.length; i++) {
+    if (body[i][0] === "DATE") { firstDateIdx = i; break; }
+  }
+  if (firstDateIdx > 0 && body.slice(0, firstDateIdx).every(t => LABEL_TYPES.has(t[0]))) {
+    body = body.slice(firstDateIdx);
+    labelsStripped = true;
+  }
+
+  // Pattern 0: bare DATE
+  if (body.length === 1 && body[0][0] === "DATE") {
+    if (labelsStripped) return null;
+    return _finish(body[0][1]);
+  }
+
+  // Pattern 2: DATE ± expr duration_unit (supports compound: + 1 week + 3 days)
+  if (body.length >= 4
+      && body[0][0] === "DATE"
+      && body[1][0] === "ADDOP") {
+    const allVars = Object.create(null);
+    for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
+    for (const k in variables) allVars[k] = variables[k];
+    let d = body[0][1];
+    let pos = 1;
+    let ok = true;
+    while (pos < body.length && body[pos][0] === "ADDOP") {
+      const op = body[pos][1];
+      pos++;
+      // Find next DURATION_WORD
+      let durPos = -1;
+      for (let j = pos; j < body.length; j++) {
+        if (body[j][0] === "WORD" && DURATION_UNITS.has(body[j][1].toLowerCase())) {
+          durPos = j;
+          break;
+        }
+      }
+      if (durPos < 0) { ok = false; break; }
+      const unit = body[durPos][1].toLowerCase();
+      const midTokens = body.slice(pos, durPos);
+      if (!midTokens.length) { ok = false; break; }
+      // Resolve variables
+      const resolvedMid = [];
+      let resolved = true;
+      for (const t of midTokens) {
+        if (t[0] === "WORD") {
+          const wl = t[1].toLowerCase();
+          if (wl in allVars && !_isDateObj(allVars[wl])) {
+            const v = allVars[wl];
+            resolvedMid.push(["NUM", v instanceof Big ? v : new Big(v), t[2], t[3]]);
+          } else { resolved = false; break; }
+        } else resolvedMid.push(t);
+      }
+      if (!resolved) { ok = false; break; }
+      resolvedMid.push(["EOF", null, 0, 0]);
+      const [nVal] = _tryParse(resolvedMid);
+      if (nVal === null) { ok = false; break; }
+      if (!nVal.mod(1).eq(0)) return [null, variables];  // dates have no time of day
+      let n = nVal.toNumber();
+      if (op === "-") n = -n;
+      if (unit === "day" || unit === "days") d = _dateAddDays(d, n);
+      else if (unit === "week" || unit === "weeks") d = _dateAddDays(d, n * 7);
+      else if (unit === "month" || unit === "months") d = _dateAddMonths(d, n);
+      else if (unit === "year" || unit === "years") d = _dateAddMonths(d, n * 12);
+      else { ok = false; break; }
+      pos = durPos + 1;
+    }
+    if (ok && pos >= body.length) return _finish(d);
+  }
+
+  // Pattern 3: DATE - DATE → number of days
+  if (body.length === 3
+      && body[0][0] === "DATE"
+      && body[1][0] === "ADDOP" && body[1][1] === "-"
+      && body[2][0] === "DATE") {
+    return _finish(new Big(_dateDiffDays(body[0][1], body[2][1])));
+  }
+
+  return null;
+}
+
+function evaluateLine(text, variables, rates, resultsAcc) {
+  let tokens = tokenize(text);
+  const hasTotal = tokens.some(t => t[0] === "TOTAL");
+  // Try date evaluation first
+  const dateResult = _tryDateEval(tokens, variables);
+  if (dateResult !== null) return [dateResult[0], dateResult[1], hasTotal];
+  // Reduce parenthesized date sub-expressions to numbers
+  tokens = _reduceDateSubexprs(tokens, variables || Object.create(null));
+  const allVars = Object.create(null);
+  for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
+  for (const k in variables) allVars[k] = variables[k];
+  // Compute subtotal from accumulator and inject as "total"/"sum"
+  if (resultsAcc) {
+    const subtotal = resultsAcc.reduce((s, r) => r !== null && !_isDateObj(r) ? s.plus(r) : s, new Big(0));
+    allVars["total"] = subtotal;
+    allVars["sum"] = subtotal;
+  }
+  const hasValue = tokens.some(t =>
+    t[0] === "NUM" || t[0] === "PCT" || t[0] === "FUNC" || t[0] === "DATE" || t[0] === "TOTAL" || (t[0] === "WORD" && t[1].toLowerCase() in allVars)
+  );
+  if (!hasValue) return [null, variables, false];
+  let pos = 0;
+  let varName = null;
+  if (tokens.length >= 3 && tokens[0][0] === "WORD" && tokens[1][0] === "EQ") {
+    varName = tokens[0][1].toLowerCase();
+    pos = 2;
+  }
+  const [conversion, convStart, convEnd] = _detectConversion(tokens, rates);
+  const eofIdx = tokens.length - 1;
+  const [mathTokens] = _buildMath(tokens, pos, convStart, convEnd, eofIdx, allVars, conversion);
+  let [result] = _tryParse(mathTokens);
+  if (result === null) return [null, variables, false];
+  if (conversion !== null) {
+    const [dim, fromFactor, toFactor] = conversion;
+    if (dim === "temperature") result = convertTemperature(result, fromFactor, toFactor);
+  }
+  if (varName) {
+    const newVars = Object.create(null);
+    for (const k in variables) newVars[k] = variables[k];
+    newVars[varName] = result;
+    return [result, newVars, hasTotal];
+  }
+  return [result, variables, hasTotal];
+}
+
+function addCommas(s) {
+  const parts = s.split(".");
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return parts.join(".");
+}
+
+function formatResult(n, fmtOpts) {
+  if (_isDateObj(n)) return _dateToISO(n);
+  if (!fmtOpts) fmtOpts = { mode: "minSig", precision: 10, separator: "underscore" };
+  const d = new Big(n);
+  const mode = fmtOpts.mode;
+  const prec = fmtOpts.precision;
+  const sep = fmtOpts.separator;
+  function applySep(s) {
+    if (sep === "comma") return s;
+    if (sep === "underscore") return s.replace(/,/g, "_");
+    if (sep === "space") return s.replace(/,/g, " ");
+    return s.replace(/,/g, "");
+  }
+  const stripZeros = s => s.includes(".") ? s.replace(/\.?0+(?=e|$)/, "") : s;
+  // Pad exponent to 2 digits to match Python's format
+  const padExp = s => s.replace(/e([+-])(\d)$/, "e$10$2");
+  // Format from Big (not float) to avoid noise digits; big.js rounds half-up
+  if (mode === "minSig") {
+    if (d.eq(0)) return "0";
+    const showDec = Math.max(prec - d.e - 1, 0);
+    return applySep(stripZeros(addCommas(d.toFixed(showDec))));
+  }
+  if (mode === "fixed") {
+    return applySep(addCommas(d.toFixed(prec)));
+  }
+  if (mode === "scientific") {
+    return padExp(d.toExponential(Math.max(prec - 1, 0)));
+  }
+  if (mode === "auto") {  // like Python's "g": scientific only for extreme exponents
+    if (d.eq(0)) return "0";
+    const exp = d.prec(prec).e;
+    const s = exp < -4 || exp >= prec ? d.toExponential(prec - 1) : d.toFixed(prec - 1 - exp);
+    return padExp(stripZeros(s));
+  }
+  return d.toString();
+}
+
+const DIRECTIVE_RE = /^@(format|separator)\s*=\s*(.+)$/i;
+const FORMAT_RE = /^(minSig|fixed|scientific|auto)(?:\((\d+)\))?$/i;
+const RATE_RE = /^@rate\s+(\w+)\/(\w+)\s*=\s*(.+)$/i;
+
+function classifyLine(text, variables, rates) {
+  const stripped = text.trim();
+  if (!stripped) return "blank";
+  if (stripped.startsWith("#")) return "comment";
+  if (DIRECTIVE_RE.test(stripped)) return "directive";
+  if (RATE_RE.test(stripped)) return "directive";
+
+  let tokens = tokenize(text);
+  const allNames = new Set();
+  for (const k in BUILTIN_CONSTS) allNames.add(k);
+  if (variables) { for (const k in variables) allNames.add(k); }
+
+  let hasDate = tokens.some(t => t[0] === "DATE" && t[0] !== "EOF");
+  if (!hasDate && variables) {
+    for (const t of tokens) {
+      if (t[0] === "WORD" && _isDateObj(variables[t[1].toLowerCase()])) { hasDate = true; break; }
+    }
+  }
+
+  const hasMath = tokens.some(t =>
+    t[0] !== "EOF" && (
+      t[0] === "NUM" || t[0] === "PCT" || t[0] === "FUNC" || t[0] === "TOTAL" || t[0] === "DATE"
+      || (t[0] === "WORD" && allNames.has(t[1].toLowerCase()))
+    )
+  );
+
+  const active = new Set();
+
+  if (hasDate && hasMath) {
+    const dateResult = _tryDateEval(tokens, variables || Object.create(null));
+    if (dateResult !== null) {
+      for (let i = 0; i < tokens.length; i++) {
+        if (tokens[i][0] !== "EOF") active.add(i);
+      }
+    } else {
+      tokens = _reduceDateSubexprs(tokens, variables || Object.create(null));
+    }
+  }
+  if (hasMath && active.size === 0) {
+    let mathStart = 0;
+    if (tokens.length >= 3 && tokens[0][0] === "WORD" && tokens[1][0] === "EQ") {
+      active.add(0);
+      active.add(1);
+      mathStart = 2;
+    }
+
+    const [conversion, convStart, convEnd] = _detectConversion(tokens, rates);
+    const eofIdx = tokens.length - 1;
+    if (conversion !== null) {
+      for (let ci = convStart; ci < convEnd; ci++) active.add(ci);
+    }
+
+    const allVars = Object.create(null);
+    for (const k in BUILTIN_CONSTS) allVars[k] = BUILTIN_CONSTS[k];
+    if (variables) { for (const k in variables) allVars[k] = variables[k]; }
+    allVars['total'] = 0; allVars['sum'] = 0;
+    const [mathTokens, mathToOrig] = _buildMath(tokens, mathStart, convStart, convEnd, eofIdx, allVars, conversion);
+    const [result, consumed] = _tryParse(mathTokens);
+
+    if (result !== null) {
+      for (let i = 0; i < consumed; i++) active.add(mathToOrig[i]);
+    } else {
+      for (let i = 0; i < mathToOrig.length; i++) {
+        if (mathTokens[i][0] === "NUM" || mathTokens[i][0] === "PCT") {
+          active.add(mathToOrig[i]);
+        }
+      }
+    }
+  }
+
+  const spans = [];
+  let pos = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t[0] === "EOF") break;
+    const start = t[2], end = t[3];
+    if (start > pos) spans.push([pos, start, true]);
+    spans.push([start, end, !active.has(i)]);
+    pos = end;
+  }
+  if (pos < text.length) spans.push([pos, text.length, true]);
+  return spans;
+}
+
+function escapeHTML(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function highlightLine(text, cls) {
+  if (cls === "blank") return "";
+  if (cls === "comment") return '<span class="hl-comment">' + escapeHTML(text) + '</span>';
+  if (cls === "directive") return '<span class="hl-dim">' + escapeHTML(text) + '</span>';
+  let html = "";
+  for (const [start, end, dim] of cls) {
+    const chunk = escapeHTML(text.substring(start, end));
+    html += dim ? '<span class="hl-dim">' + chunk + '</span>' : chunk;
+  }
+  return html;
+}
+
+const RESULT_RE = /\s{2,}# => .*$|\s+#\s+│$/;
+const ALIGNABLE_RE = /^-?[\d_, ]+(\.\d+)?$/;
+
+function splitSections(output, lines) {
+  const sections = [];
+  let cur = [];
+  for (let i = 0; i < output.length; i++) {
+    if (output[i].result === null && lines[i].trim().startsWith("#")) {
+      if (cur.length) sections.push(cur);
+      cur = [i];
+    } else {
+      cur.push(i);
+    }
+  }
+  if (cur.length) sections.push(cur);
+  return sections;
+}
+
+function computeTotalIndicators(output, lines) {
+  // Returns array: null, "summed", or "total" per line
+  const indicators = new Array(output.length).fill(null);
+  const sections = splitSections(output, lines);
+  for (const sec of sections) {
+    for (const i of sec) {
+      if (output[i].isTotal) {
+        indicators[i] = "total";
+        let first = i;
+        for (let j = sec.indexOf(i) - 1; j >= 0; j--) {
+          const k = sec[j];
+          if (output[k].isTotal) break;
+          if (output[k].result !== null) { indicators[k] = "summed"; first = k; }
+        }
+        // Continue the bracket across non-result lines
+        for (let k = first; k < i; k++) indicators[k] = "summed";
+      }
+    }
+  }
+  return indicators;
+}
+
+function alignDecimalPoints(output, lines, mode) {
+  // mode: "frac" for web (right-pad frac, used with text-align:right)
+  //        "int" for file export (left-pad int part)
+  const aligned = output.map(o => o.result);
+  const sections = splitSections(output, lines);
+
+  for (const sec of sections) {
+    const info = [];
+    for (const i of sec) {
+      const r = aligned[i];
+      if (r !== null && ALIGNABLE_RE.test(r)) {
+        const dot = r.indexOf(".");
+        const intW = dot >= 0 ? dot : r.length;
+        const fracW = r.length - intW;
+        info.push({ i, intW, fracW });
+      }
+    }
+    if (info.length < 2) continue;
+    const maxIntW = Math.max(...info.map(x => x.intW));
+    const maxFracW = Math.max(...info.map(x => x.fracW));
+    if (mode === "frac") {
+      for (const x of info) {
+        const pad = Math.max(maxFracW - x.fracW, 0);
+        if (pad > 0) aligned[x.i] = aligned[x.i] + "\u00a0".repeat(pad);
+      }
+    } else {
+      for (const x of info) {
+        const pad = Math.max(maxIntW - x.intW, 0);
+        if (pad > 0) aligned[x.i] = " ".repeat(pad) + aligned[x.i];
+      }
+    }
+  }
+  return aligned;
+}
+
+function processText(text) {
+  const lines = text.split("\n");
+  let variables = Object.create(null);
+  const rates = Object.create(null);
+  let resultsAcc = [];
+  let fmtOpts = { mode: "minSig", precision: 10, separator: "underscore" };
+  const output = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const stripped = line.trim();
+    const rm = stripped.match(RATE_RE);
+    if (rm) {
+      const cls = classifyLine(line, variables, rates);
+      const fr = rm[1].toLowerCase();
+      const to = rm[2].toLowerCase();
+      let v = null;
+      try { v = new Big(rm[3].trim()); } catch (e) {}
+      if (v && v.gt(0)) rates[fr + "/" + to] = v;
+      output.push({ result: null, cls });
+      continue;
+    }
+    const cls = classifyLine(line, variables, rates);
+    const dm = stripped.match(DIRECTIVE_RE);
+    if (dm) {
+      const key = dm[1].toLowerCase();
+      const val = dm[2].trim();
+      if (key === "format") {
+        const fm = val.match(FORMAT_RE);
+        if (fm) {
+          const modeRaw = fm[1].toLowerCase();
+          const modeMap = { minsig: "minSig", fixed: "fixed", scientific: "scientific", auto: "auto" };
+          fmtOpts.mode = modeMap[modeRaw] || modeRaw;
+          fmtOpts.precision = fm[2] !== undefined ? parseInt(fm[2]) : (modeRaw === "minsig" ? 10 : 3);
+        }
+      } else if (key === "separator") {
+        const v = val.toLowerCase();
+        if (["off","underscore","comma","space"].includes(v)) fmtOpts.separator = v;
+      }
+      output.push({ result: null, cls });
+      continue;
+    }
+    if (stripped.startsWith("#")) {
+      resultsAcc = [];
+      output.push({ result: null, cls });
+      continue;
+    }
+    if (!stripped) {
+      resultsAcc.push(null);
+      output.push({ result: null, cls });
+      continue;
+    }
+    const [result, newVars, isTotal] = evaluateLine(stripped, variables, rates, resultsAcc);
+    variables = newVars;
+    if (result !== null) {
+      resultsAcc.push(result);
+      output.push({ result: formatResult(result, { ...fmtOpts }), cls, isTotal });
+      if (isTotal) resultsAcc = [];
+    } else {
+      resultsAcc.push(null);
+      output.push({ result: null, cls });
+    }
+  }
+  const aligned = alignDecimalPoints(output, lines, "int");
+  for (let i = 0; i < output.length; i++) output[i].result = aligned[i];
+  return output;
+}
+// END CALCED ENGINE
+</script>
+
+<script>
+// --- UI Wiring ---
+const input = document.getElementById("input");
+const results = document.getElementById("results");
+const highlight = document.getElementById("highlight");
+const shareBtn = document.getElementById("share-btn");
+const docsBtn = document.getElementById("docs-btn");
+const cheatsheet = document.getElementById("cheatsheet");
+
+// --- Docs Panel ---
+const EXAMPLES = {
+  basics: "2 + 3\n10 * (4 + 6)\n2 ^ 10\n17 % 5",
+  variables: "price = 100\nqty = 3\nprice * qty\n\ntax_rate = 22%\ntotal = price * qty\ntax = total * tax_rate\nafter_tax = total - tax",
+  pct: "50% of 300\n200 + 15%\n200 - 10%",
+  units: "5 km in miles\n100 C in F\n1 gib in mib\n60 min in hr\n1 gal in l",
+  funcs: "sqrt(16)\nround(3.14159, 2)\nmin(5, 2, 8)\nmax(1, 9, 3)\nlog10(1000)",
+  fmt: "1000000\n\n@format = fixed(2)\n1000000\n\n@format = scientific\n1000000\n\n@separator = comma\n@format = minSig(3)\n1000000",
+  dates: "today + 2 weeks\nyesterday\ntomorrow\n\n# Deadline\ndeadline = 2026-12-31\ndays until deadline\n\n# Date math\n2025-01-31 + 1 month\n2025-03-01 - 2025-01-01",
+  rates: "@rate USD/EUR = 0.92\n100 USD in EUR\n50 EUR in USD\n\n@rate BTC/USD = 97500\n0.5 BTC in USD",
+};
+
+function toggleDocs() {
+  const show = cheatsheet.hidden;
+  cheatsheet.hidden = !show;
+  docsBtn.innerHTML = show ? "Docs &#x25B4;" : "Docs &#x25BE;";
+  try { localStorage.setItem("calced-docs", show ? "1" : "0"); } catch(e) {}
+}
+
+function tryExample(key) {
+  const text = EXAMPLES[key];
+  if (!text) return;
+  if (input.value.trim() && !confirm("Replace editor content with example?")) return;
+  input.value = text;
+  render();
+  cheatsheet.hidden = true;
+  docsBtn.innerHTML = "Docs &#x25BE;";
+  try { localStorage.setItem("calced-docs", "0"); } catch(e) {}
+  input.focus();
+}
+
+try {
+  if (localStorage.getItem("calced-docs") === "1") {
+    cheatsheet.hidden = false;
+    docsBtn.innerHTML = "Docs &#x25B4;";
+  }
+} catch(e) {}
+
+function render() {
+  const text = input.value;
+  const cleaned = text.split("\n").map(l => l.replace(RESULT_RE, "")).join("\n");
+  if (cleaned !== text) input.value = cleaned;
+  const lines = cleaned.split("\n");
+  const output = processText(cleaned);
+  const aligned = alignDecimalPoints(output, lines, "frac");
+  const indicators = computeTotalIndicators(output, lines);
+  results.innerHTML = aligned.map((r, i) => {
+    const cls = ["result-line"];
+    if (indicators[i] === "summed") cls.push("summed");
+    if (indicators[i] === "total") cls.push("total-line");
+    return '<div class="' + cls.join(" ") + '">' + (r !== null ? escapeHTML(r) : '') + '</div>';
+  }).join("");
+  highlight.innerHTML = output.map((o, i) =>
+    '<div class="hl-line">' + highlightLine(lines[i], o.cls) + '</div>'
+  ).join("");
+  // Sync result line heights with highlight line heights
+  const hlLines = highlight.children;
+  const resLines = results.children;
+  for (let i = 0; i < hlLines.length && i < resLines.length; i++) {
+    resLines[i].style.height = hlLines[i].getBoundingClientRect().height + 'px';
+  }
+  scheduleHashUpdate();
+  try { localStorage.setItem("calced-input", text); } catch(e) {}
+  const heading = lines.find(l => l.trim().startsWith("#"));
+  document.title = heading ? heading.replace(/^#+ */, "").trim() + " - calced" : "calced";
+}
+
+input.addEventListener("input", render);
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !cheatsheet.hidden) toggleDocs(); });
+
+// --- Line hover highlight ---
+let hoveredIdx = -1;
+const editorInner = document.querySelector(".editor-inner");
+function setHoveredLine(idx) {
+  if (idx === hoveredIdx) return;
+  if (hoveredIdx >= 0) {
+    highlight.children[hoveredIdx]?.classList.remove("line-hover");
+    results.children[hoveredIdx]?.classList.remove("line-hover");
+  }
+  hoveredIdx = idx;
+  if (hoveredIdx >= 0) {
+    highlight.children[hoveredIdx]?.classList.add("line-hover");
+    results.children[hoveredIdx]?.classList.add("line-hover");
+  }
+}
+editorInner.addEventListener("mousemove", e => {
+  const resLine = e.target.closest(".result-line");
+  if (resLine) {
+    setHoveredLine([...results.children].indexOf(resLine));
+    return;
+  }
+  // Over input area: find line by Y position
+  const resChildren = results.children;
+  if (!resChildren.length) return;
+  const y = e.clientY;
+  for (let i = resChildren.length - 1; i >= 0; i--) {
+    if (y >= resChildren[i].getBoundingClientRect().top) {
+      setHoveredLine(i);
+      return;
+    }
+  }
+  setHoveredLine(-1);
+});
+editorInner.addEventListener("mouseleave", () => setHoveredLine(-1));
+
+// --- URL Hash Encoding ---
+let hashTimer = null;
+function scheduleHashUpdate() {
+  clearTimeout(hashTimer);
+  hashTimer = setTimeout(() => updateHash(), 300);
+}
+
+async function compressText(text) {
+  if (typeof CompressionStream === "undefined") {
+    return "b64." + btoa(unescape(encodeURIComponent(text)));
+  }
+  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+  const buf = await new Response(stream).arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function decompressText(hash) {
+  if (hash.startsWith("b64.")) {
+    return decodeURIComponent(escape(atob(hash.slice(4))));
+  }
+  const binary = atob(hash.replace(/-/g, "+").replace(/_/g, "/"));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  if (typeof DecompressionStream === "undefined") {
+    return decodeURIComponent(escape(atob(hash)));
+  }
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return await new Response(stream).text();
+}
+
+async function updateHash() {
+  const text = input.value;
+  if (!text) { history.replaceState(null, "", location.pathname); return; }
+  const encoded = await compressText(text);
+  history.replaceState(null, "", "#" + encoded);
+}
+
+async function loadFromHash() {
+  const hash = location.hash.slice(1);
+  if (!hash) return false;
+  if (hash === "new") {
+    history.replaceState(null, "", location.pathname);
+    return true;
+  }
+  try {
+    input.value = await decompressText(hash);
+    render();
+  } catch (e) {
+    console.error("Failed to decode URL hash:", e);
+  }
+  return true;
+}
+
+function formatForFile(text) {
+  const lines = text.split("\n");
+  const output = processText(text);
+  const aligned = alignDecimalPoints(output, lines, "int");
+  const indicators = computeTotalIndicators(output, lines);
+
+  // Per-section column alignment (match Python CLI behavior)
+  const sections = splitSections(output, lines);
+
+  const formatted = new Array(lines.length);
+  for (const sec of sections) {
+    const resultIdxs = sec.filter(i => output[i].result !== null || indicators[i]);
+    const maxLen = resultIdxs.length ? Math.max(...resultIdxs.map(i => lines[i].length)) : 0;
+    const align = Math.max(maxLen + 2, 40);
+    // Compute max result width among indicator-bearing lines for alignment
+    let maxIndW = 0;
+    for (const i of sec) {
+      if (output[i].result !== null && indicators[i]) {
+        maxIndW = Math.max(maxIndW, aligned[i].length);
+      }
+    }
+    for (const i of sec) {
+      if (output[i].result !== null) {
+        const hasInd = indicators[i];
+        const ind = indicators[i] === "summed" ? " │" : indicators[i] === "total" ? " ┘" : "";
+        const padded = hasInd ? aligned[i].padEnd(maxIndW) : aligned[i];
+        formatted[i] = lines[i].padEnd(align) + "# => " + padded + ind;
+      } else if (indicators[i]) {
+        formatted[i] = lines[i].padEnd(align) + "#" + " ".repeat(" => ".length + maxIndW) + " │";
+      } else {
+        formatted[i] = lines[i];
+      }
+    }
+  }
+  return formatted.join("\n");
+}
+
+function downloadFile() {
+  const text = input.value;
+  if (!text.trim()) return;
+  const content = formatForFile(text);
+  const blob = new Blob([content + "\n"], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const heading = text.split("\n").find(l => l.trim().startsWith("#"));
+  a.download = (heading ? heading.replace(/^#+ */, "").trim() : "calced") + ".txt";
+  a.href = url;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function shareURL() {
+  navigator.clipboard.writeText(location.href).then(() => {
+    shareBtn.textContent = "Link copied!";
+    shareBtn.classList.add("copied");
+    setTimeout(() => { shareBtn.textContent = "Share"; shareBtn.classList.remove("copied"); }, 1500);
+  });
+}
+
+const WELCOME = `Write math anywhere. Results appear on the right.
+
+# Monthly Budget
+
+rent 1500
+groceries 200 + 150
+utilities 80 + 45
+total
+
+# Variables and percentages
+
+income = 5000
+tax = income * 22%
+after_tax = income - tax
+
+# Unit conversions
+
+5 km in miles
+100 C in F
+
+Try editing these lines, or click New for a blank sheet.
+Click Docs for more features (functions, formatting, etc.)
+`;
+
+loadFromHash().then((hadHash) => {
+  if (!input.value && !hadHash) {
+    try {
+      const saved = localStorage.getItem("calced-input");
+      if (saved) { input.value = saved; render(); }
+      else if (saved === null) { input.value = WELCOME; render(); }
+    } catch(e) {}
+  }
+});
+</script>
+</body>
+</html>
