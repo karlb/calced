@@ -1196,14 +1196,15 @@ def format_result(n, fmt_opts=None):
     return str(n)
 
 
-def _process_lines(content):
+def _process_lines(content, rates=None):
     """Parse and evaluate lines, yielding (clean, result, fmt_opts_snapshot, vars_snapshot, is_total) tuples."""
     lines = content.split("\n")
     if lines and lines[-1] == "":
         lines = lines[:-1]
 
     variables = {}
-    rates = {}
+    if rates is None:
+        rates = {}
     results_acc = []
     fmt_opts = dict(DEFAULT_FMT_OPTS)
 
@@ -1278,7 +1279,8 @@ def process_file(filepath, show=False, no_color=False, stdin_content=None, dry_r
         and os.environ.get("TERM") != "dumb"
     )
 
-    evaluated = list(_process_lines(original))
+    rates = {}
+    evaluated = list(_process_lines(original, rates))
 
     # Format output with per-section alignment (sections split at header lines)
     def _flush_section(section):
