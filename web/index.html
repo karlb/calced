@@ -721,8 +721,10 @@ function powInt(base, n) {
 function _tryParse(mathTokens) {
   try {
     const parser = new Parser(mathTokens);
-    const result = parser.parseExpr();
+    let result = parser.parseExpr();
+    // Keep results within float range, like Python
     if (!isFinite(result.toNumber())) throw new Error("overflow");
+    if (result.toNumber() === 0) result = new Big(0);
     if (parser.peek()[0] === "EOF") return [result, parser.pos];
     let depth = 0, ok = true;
     for (let k = parser.pos; k < mathTokens.length; k++) {
@@ -961,7 +963,7 @@ function addCommas(s) {
 function formatResult(n, fmtOpts) {
   if (_isDateObj(n)) return _dateToISO(n);
   if (!fmtOpts) fmtOpts = { mode: "minSig", precision: 10, separator: "underscore" };
-  const nf = typeof n.toNumber === "function" ? n.toNumber() : n;
+  const d = new Big(n);
   const mode = fmtOpts.mode;
   const prec = fmtOpts.precision;
   const sep = fmtOpts.separator;
@@ -971,31 +973,28 @@ function formatResult(n, fmtOpts) {
     if (sep === "space") return s.replace(/,/g, " ");
     return s.replace(/,/g, "");
   }
+  const stripZeros = s => s.includes(".") ? s.replace(/\.?0+(?=e|$)/, "") : s;
+  // Pad exponent to 2 digits to match Python's format
+  const padExp = s => s.replace(/e([+-])(\d)$/, "e$10$2");
+  // Format from Big (not float) to avoid noise digits; big.js rounds half-up
   if (mode === "minSig") {
-    if (nf === 0) return applySep("0");
-    const showDec = Math.max(-Math.floor(Math.log10(Math.abs(nf)) + 1) + prec, 0);
-    const rounded = parseFloat(nf.toFixed(showDec));
-    let s;
-    if (showDec === 0) {
-      s = addCommas(Math.round(rounded).toString());
-    } else {
-      s = addCommas(rounded.toFixed(showDec));
-      s = s.replace(/0+$/, "").replace(/\.$/, "");
-    }
-    return applySep(s);
+    if (d.eq(0)) return "0";
+    const showDec = Math.max(prec - d.e - 1, 0);
+    return applySep(stripZeros(addCommas(d.toFixed(showDec))));
   }
   if (mode === "fixed") {
-    return applySep(addCommas(nf.toFixed(prec)));
+    return applySep(addCommas(d.toFixed(prec)));
   }
   if (mode === "scientific") {
-    const decPlaces = Math.max(prec - 1, 0);
-    // Pad exponent to 2 digits to match Python's format
-    return nf.toExponential(decPlaces).replace(/e([+-])(\d)$/, "e$1" + "0$2");
+    return padExp(d.toExponential(Math.max(prec - 1, 0)));
   }
-  if (mode === "auto") {
-    return nf.toPrecision(prec);
+  if (mode === "auto") {  // like Python's "g": scientific only for extreme exponents
+    if (d.eq(0)) return "0";
+    const exp = d.prec(prec).e;
+    const s = exp < -4 || exp >= prec ? d.toExponential(prec - 1) : d.toFixed(prec - 1 - exp);
+    return padExp(stripZeros(s));
   }
-  return String(nf);
+  return d.toString();
 }
 
 const DIRECTIVE_RE = /^@(format|separator)\s*=\s*(.+)$/i;

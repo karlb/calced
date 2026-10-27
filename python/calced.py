@@ -11,7 +11,7 @@ import json
 import math
 import os
 import re
-from decimal import Decimal, InvalidOperation, Overflow
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation, Overflow, localcontext
 import sys
 import time
 import zlib
@@ -867,8 +867,11 @@ def _try_parse(math_tokens):
     try:
         parser = Parser(math_tokens)
         result = parser.parse_expr()
+        # Keep results within float range, like JS
         if not math.isfinite(float(result)):
             raise OverflowError
+        if float(result) == 0:
+            result = Decimal(0)
         if parser.peek()[0] == "EOF":
             return result, parser.pos
         depth = 0
@@ -1158,7 +1161,7 @@ def format_result(n, fmt_opts=None):
         return n.isoformat()
     if fmt_opts is None:
         fmt_opts = {"mode": "minSig", "precision": 10, "separator": "underscore"}
-    n = float(n)  # Decimal→float for display (float's ~15 digits > max display precision)
+    n = Decimal(str(n))
     mode = fmt_opts["mode"]
     prec = fmt_opts["precision"]
     sep = fmt_opts["separator"]
@@ -1172,28 +1175,37 @@ def format_result(n, fmt_opts=None):
             return s.replace(",", " ")
         return s.replace(",", "")  # "off"
 
-    if mode == "minSig":
-        if n == 0:
-            s = "0"
-        else:
-            show_dec = max(-math.floor(math.log10(abs(n)) + 1) + prec, 0)
-            rounded = round(n, show_dec)
-            if show_dec == 0:
-                s = f"{int(rounded):,}"
-            else:
-                s = f"{rounded:,.{show_dec}f}"
-                s = s.rstrip("0").rstrip(".")
-        return apply_sep(s)
+    def strip_zeros(s):
+        return re.sub(r"\.?0+(?=e|$)", "", s) if "." in s else s
 
-    if mode == "fixed":
-        return apply_sep(f"{n:,.{prec}f}")
+    def pad_exp(s):
+        return re.sub(r"e([+-])(\d)$", r"e\g<1>0\2", s)
 
-    if mode == "scientific":
-        # prec = sig figs; Python's e format takes decimal places = sig figs - 1
-        return f"{n:.{max(prec - 1, 0)}e}"
+    # Format from Decimal (not float) to avoid noise digits; half-up like big.js
+    with localcontext(rounding=ROUND_HALF_UP):
+        if mode == "minSig":
+            if n == 0:
+                return "0"
+            show_dec = max(prec - n.adjusted() - 1, 0)
+            return apply_sep(strip_zeros(f"{n:,.{show_dec}f}"))
 
-    if mode == "auto":
-        return f"{n:.{prec}g}"
+        if mode == "fixed":
+            return apply_sep(f"{n:,.{prec}f}")
+
+        if mode == "scientific":
+            # prec = sig figs; e format takes decimal places = sig figs - 1
+            places = max(prec - 1, 0)
+            if n == 0:
+                return f"{0:.{places}e}"  # Decimal zero formats as 0.00e+2
+            return pad_exp(f"{n:.{places}e}")
+
+        if mode == "auto":  # like float's "g": scientific only for extreme exponents
+            if n == 0:
+                return "0"
+            with localcontext(prec=prec):
+                exp = (+n).adjusted()
+            s = f"{n:.{prec - 1}e}" if exp < -4 or exp >= prec else f"{n:.{prec - 1 - exp}f}"
+            return pad_exp(strip_zeros(s))
 
     return str(n)
 
