@@ -889,7 +889,8 @@ function _tryDateEvalInner(tokens, variables) {
       resolvedMid.push(["EOF", null, 0, 0]);
       const [nVal] = _tryParse(resolvedMid);
       if (nVal === null) { ok = false; break; }
-      let n = Math.round(nVal.toNumber());
+      if (!nVal.mod(1).eq(0)) return [null, variables];  // dates have no time of day
+      let n = nVal.toNumber();
       if (op === "-") n = -n;
       if (unit === "day" || unit === "days") d = _dateAddDays(d, n);
       else if (unit === "week" || unit === "weeks") d = _dateAddDays(d, n * 7);

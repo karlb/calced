@@ -1074,6 +1074,8 @@ def _try_date_eval_inner(tokens, variables):
                 n_val, _ = _try_parse(resolved_math)
                 if n_val is None:
                     break
+                if n_val % 1:
+                    return None, variables  # dates have no time of day
                 n = int(n_val)
                 if op == "-":
                     n = -n

@@ -28,3 +28,10 @@ deadline - 2025-06-15                   # => 14
 100                                     # => 100        │
 200                                     # => 200        │
 total                                   # => 300        ┘
+
+# Fractional amounts give no result (dates have no time of day)
+2025-01-15 + 1.5 days
+2025-01-15 + 1.5 weeks
+2025-01-15 - 0.5 months
+2025-01-15 + 2 days                     # => 2025-01-17
+2025-01-15 + 3 weeks                    # => 2025-02-05
