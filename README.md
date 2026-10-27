@@ -12,7 +12,7 @@ Spreadsheets are overkill for quick calculations. REPLs lose context once you cl
 
 Compared to other notepad calculators:
 
-- **Tiny, no dependencies** — the CLI is a single 47KB Python file (stdlib only), the web app is a single 52KB HTML file. No build step, no node_modules, no Electron.
+- **Tiny, no dependencies** — the CLI is a single 56KB Python file (stdlib only), the web app is a single 63KB HTML file. No build step, no node_modules, no Electron.
 - **Works offline** — both versions run entirely locally. Save the HTML file or install the CLI and you're set.
 - **Both CLI and web** — same syntax, same test suite, but well adapted to each environment.
 - **Stable results** — shared web URLs include the major version, so they won't break on updates. Files store results inline. All configuration is inside the documents.

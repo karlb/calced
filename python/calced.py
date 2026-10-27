@@ -11,7 +11,7 @@ import json
 import math
 import os
 import re
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation, Overflow, localcontext
+from decimal import ROUND_HALF_UP, Context, Decimal, InvalidOperation, Overflow, localcontext
 import sys
 import time
 import zlib
@@ -101,8 +101,8 @@ BUILTIN_FUNCS_1 = {
 def _round(args):
     """Round half away from zero, like big.js."""
     places = int(args[1]) if len(args) > 1 else 0
-    with localcontext(prec=1000):  # quantize fails beyond context precision
-        return args[0].quantize(Decimal(1).scaleb(-places), ROUND_HALF_UP)
+    # High precision: quantize fails beyond context precision
+    return args[0].quantize(Decimal(1).scaleb(-places), ROUND_HALF_UP, Context(prec=1000))
 
 
 BUILTIN_FUNCS_N = {
@@ -1188,7 +1188,8 @@ def format_result(n, fmt_opts=None):
         return re.sub(r"e([+-])(\d)$", r"e\g<1>0\2", s)
 
     # Format from Decimal (not float) to avoid noise digits; half-up like big.js
-    with localcontext(rounding=ROUND_HALF_UP):
+    with localcontext() as ctx:
+        ctx.rounding = ROUND_HALF_UP
         if mode == "minSig":
             if n == 0:
                 return "0"
@@ -1208,8 +1209,7 @@ def format_result(n, fmt_opts=None):
         if mode == "auto":  # like float's "g": scientific only for extreme exponents
             if n == 0:
                 return "0"
-            with localcontext(prec=prec):
-                exp = (+n).adjusted()
+            exp = Context(prec=prec, rounding=ROUND_HALF_UP).plus(n).adjusted()
             s = f"{n:.{prec - 1}e}" if exp < -4 or exp >= prec else f"{n:.{prec - 1 - exp}f}"
             return pad_exp(strip_zeros(s))
 
@@ -1586,7 +1586,8 @@ def main():
     if args.url:
         content = open(args.file).read()
         content = "\n".join(RESULT_RE.sub("", line) for line in content.split("\n"))
-        compressed = zlib.compress(content.encode(), wbits=-15)
+        c = zlib.compressobj(wbits=-15)  # zlib.compress(wbits=) needs Python 3.11
+        compressed = c.compress(content.encode()) + c.flush()
         encoded = base64.b64encode(compressed).decode()
         encoded = encoded.replace("+", "-").replace("/", "_").rstrip("=")
         major = _get_version().split(".")[0]
